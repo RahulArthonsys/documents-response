@@ -1,0 +1,100 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+  .msg-bubble { padding: 10px 14px; border-radius: 14px; margin-bottom: 10px; max-width: 80%; }
+  .msg-user { background: #007bff; color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+  .msg-assistant { background: #f1f3f5; color: #333; border: 1px solid #dee2e6; border-bottom-left-radius: 4px; }
+  .msg-wrapper { display: flex; flex-direction: column; }
+  .msg-wrapper.user { align-items: flex-end; }
+  .msg-meta { font-size: 0.78rem; color: #aaa; margin-bottom: 2px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-6">
+        <h1 class="m-0 text-dark">
+          <i class="fas fa-comments text-info mr-2"></i>{{ conversation.title|default:"Conversation" }}
+        </h1>
+      </div>
+      <div class="col-sm-6">
+        <ol class="breadcrumb float-sm-right">
+          <li class="breadcrumb-item"><a href="{% url 'admin-dashboard' %}">Dashboard</a></li>
+          <li class="breadcrumb-item"><a href="{% url 'claire-history' %}">Claire History</a></li>
+          <li class="breadcrumb-item active">#{{ conversation.pk }}</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="card card-primary card-outline">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-comment-dots mr-2"></i>
+              Messages ({{ chat_messages.count }})
+            </h3>
+            <div class="card-tools">
+              <a href="{% url 'claire-history' %}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-left mr-1"></i> Back
+              </a>
+            </div>
+          </div>
+          <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+            {% for msg in chat_messages %}
+            <div class="msg-wrapper {{ msg.role }}">
+              <div class="msg-meta">
+                {% if msg.role == 'user' %}
+                  <i class="fas fa-user mr-1"></i>{{ conversation.user.email }}
+                {% else %}
+                  <i class="fas fa-robot mr-1"></i>Claire
+                {% endif %}
+                &nbsp;·&nbsp;{{ msg.timestamp|date:"H:i, M d Y" }}
+              </div>
+              <div class="msg-bubble msg-{{ msg.role }}" style="white-space: pre-wrap;">{{ msg.content }}</div>
+            </div>
+            {% empty %}
+            <p class="text-center text-muted">No messages in this conversation.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card card-info card-outline">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-info-circle mr-1"></i> Info</h3>
+          </div>
+          <div class="card-body">
+            <p class="text-sm mb-1"><strong>User:</strong></p>
+            <p class="text-muted text-sm">{{ conversation.user.email }}</p>
+            <p class="text-sm mb-1"><strong>Started:</strong></p>
+            <p class="text-muted text-sm">{{ conversation.created_at|date:"M d, Y H:i" }}</p>
+            <p class="text-sm mb-1"><strong>Last updated:</strong></p>
+            <p class="text-muted text-sm">{{ conversation.updated_at|date:"M d, Y H:i" }}</p>
+            <p class="text-sm mb-1"><strong>Messages:</strong></p>
+            <p class="text-muted text-sm">{{ chat_messages.count }}</p>
+          </div>
+          <div class="card-footer">
+            <form method="post" action="{% url 'claire-conversation-delete' conversation.pk %}"
+                  onsubmit="return confirm('Delete this entire conversation?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger btn-block btn-sm">
+                <i class="fas fa-trash mr-1"></i> Delete Conversation
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+# Environment variables
+.env
+.env.*
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Django
+*.sqlite3
+run/media/
+run/static/
+run/models/
+run/predictions/
+run/uploads/
+
+# ChromaDB
+chroma_store/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# macOS
+__MACOSX/

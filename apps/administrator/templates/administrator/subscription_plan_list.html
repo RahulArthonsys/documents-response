@@ -1,0 +1,86 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block body %}
+<section class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-6">
+        <h1>Subscription Plans</h1>
+      </div>
+      <div class="col-sm-6">
+        <ol class="breadcrumb float-sm-right">
+          <li class="breadcrumb-item"><a href="{% url 'admin-dashboard' %}">Dashboard</a></li>
+          <li class="breadcrumb-item active">Subscription Plans</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">All Plans</h3>
+            <div class="card-tools">
+              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus"></i> Add Plan
+              </a>
+            </div>
+          </div>
+          <div class="card-body table-responsive p-0">
+            <table class="table table-hover text-nowrap">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Subscribers</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for plan in plans %}
+                <tr>
+                  <td>{{ forloop.counter }}</td>
+                  <td><strong>{{ plan.name }}</strong><br><small class="text-muted">{{ plan.description|truncatechars:50 }}</small></td>
+                  <td>${{ plan.price }}</td>
+                  <td>{{ plan.get_duration_days_display }}</td>
+                  <td>
+                    {% if plan.is_active %}
+                      <span class="badge badge-success">Active</span>
+                    {% else %}
+                      <span class="badge badge-secondary">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td><span class="badge badge-info">{{ plan.subscriptions.count }}</span></td>
+                  <td>{{ plan.created_at|date:"d M Y" }}</td>
+                  <td>
+                    <a href="{% url 'admin-subscription-plan-edit' plan.pk %}" class="btn btn-xs btn-warning text-white mr-1">
+                      <i class="fas fa-edit"></i> Edit
+                    </a>
+                    <a href="javascript:;" class="btn btn-xs btn-danger remove_record" data-url="{% url 'admin-subscription-plan-delete' plan.pk %}">
+                      <i class="fas fa-trash"></i> Delete
+                    </a>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="8" class="text-center text-muted py-3">No subscription plans yet. <a href="{% url 'admin-subscription-plan-add' %}">Add one now.</a></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

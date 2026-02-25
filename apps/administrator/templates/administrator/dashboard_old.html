@@ -1,0 +1,317 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block body %}
+<!-- Content Header (Page header) -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-6">
+        <h1 class="m-0 text-dark">Dashboard</h1>
+      </div>
+      <div class="col-sm-6">
+        <ol class="breadcrumb float-sm-right">
+          <li class="breadcrumb-item active">Dashboard</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /.content-header -->
+
+<section class="content">
+  <div class="container-fluid">
+
+    <!-- ── Stat Boxes ── -->
+    <div class="row">
+
+      <!-- Total Customers -->
+      <div class="col-lg-3 col-6">
+        <div class="small-box bg-info">
+          <div class="inner">
+            <h3>{{ users_count }}</h3>
+            <p>Total Customers</p>
+          </div>
+          <div class="icon"><i class="fas fa-users"></i></div>
+          <a href="{% url 'admin-user-list' %}" class="small-box-footer">
+            More info <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Active Customers -->
+      <div class="col-lg-3 col-6">
+        <div class="small-box bg-success">
+          <div class="inner">
+            <h3>{{ active_users_count }}</h3>
+            <p>Active Customers</p>
+          </div>
+          <div class="icon"><i class="fas fa-user-check"></i></div>
+          <a href="{% url 'admin-user-list' %}" class="small-box-footer">
+            More info <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- New This Month -->
+      <div class="col-lg-3 col-6">
+        <div class="small-box bg-warning">
+          <div class="inner">
+            <h3>{{ new_users_count }}</h3>
+            <p>New (Last 30 Days)</p>
+          </div>
+          <div class="icon"><i class="fas fa-user-plus"></i></div>
+          <a href="{% url 'admin-user-add' %}" class="small-box-footer">
+            Add Customer <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+    </div>
+    <!-- /.row (stat boxes) -->
+
+    <!-- ── Subscription Boxes ── -->
+    <div class="row">
+
+      <!-- Total Plans -->
+      <div class="col-lg-4 col-6">
+        <div class="small-box" style="background:#6f42c1;color:#fff;">
+          <div class="inner">
+            <h3>{{ plans_count }}</h3>
+            <p>Total Plans</p>
+          </div>
+          <div class="icon"><i class="fas fa-tags"></i></div>
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+            Manage Plans <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Active Plans -->
+      <div class="col-lg-4 col-6">
+        <div class="small-box" style="background:#17a2b8;color:#fff;">
+          <div class="inner">
+            <h3>{{ active_plans_count }}</h3>
+            <p>Active Plans</p>
+          </div>
+          <div class="icon"><i class="fas fa-check-circle"></i></div>
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+            View Plans <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Active Subscriptions -->
+      <div class="col-lg-4 col-6">
+        <div class="small-box" style="background:#e83e8c;color:#fff;">
+          <div class="inner">
+            <h3>{{ active_subs_count }}</h3>
+            <p>Active Subscriptions</p>
+          </div>
+          <div class="icon"><i class="fas fa-star"></i></div>
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+            View Details <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+    </div>
+    <!-- /.row (subscription boxes) -->
+
+    <!-- ── Charts Row ── -->
+    <div class="row">
+      <div class="col-md-8">
+        <div class="card card-info">
+          <div class="card-header">
+            <h3 class="card-title">Monthly Customer Registrations</h3>
+          </div>
+          <div class="card-body">
+            <canvas id="registrationChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="card card-primary">
+          <div class="card-header">
+            <h3 class="card-title">Active vs Inactive</h3>
+          </div>
+          <div class="card-body">
+            <canvas id="pieChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /.charts row -->
+
+    <!-- ── Recent Subscription Plans ── -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card card-purple">
+          <div class="card-header" style="background:#6f42c1;">
+            <h3 class="card-title text-white">Subscription Plans</h3>
+            <div class="card-tools">
+              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm btn-light">
+                <i class="fas fa-plus"></i> Add Plan
+              </a>
+            </div>
+          </div>
+          <div class="card-body table-responsive p-0">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Plan Name</th>
+                  <th>Price</th>
+                  <th>Duration</th>
+                  <th>Subscribers</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for plan in recent_plans %}
+                <tr>
+                  <td><strong>{{ plan.name }}</strong></td>
+                  <td>${{ plan.price }}</td>
+                  <td>{{ plan.get_duration_days_display }}</td>
+                  <td><span class="badge badge-info">{{ plan.subscriptions.count }}</span></td>
+                  <td>
+                    {% if plan.is_active %}
+                      <span class="badge badge-success">Active</span>
+                    {% else %}
+                      <span class="badge badge-secondary">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a href="{% url 'admin-subscription-plan-edit' plan.pk %}" class="btn btn-xs btn-warning text-white">
+                      <i class="fas fa-edit"></i> Edit
+                    </a>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No plans yet. <a href="{% url 'admin-subscription-plan-add' %}">Add first plan.</a></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <a href="{% url 'admin-subscription-plan-list' %}" class="btn btn-sm btn-default">View All Plans</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /.subscription plans row -->
+
+    <!-- ── Recent Customers ── -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recently Registered Customers</h3>
+            <div class="card-tools">
+              <a href="{% url 'admin-user-add' %}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus"></i> Add Customer
+              </a>
+            </div>
+          </div>
+          <div class="card-body table-responsive p-0">
+            <table class="table table-hover text-nowrap">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Joined</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for u in recent_users %}
+                <tr>
+                  <td>{{ forloop.counter }}</td>
+                  <td>{{ u.get_full_name|default:"-" }}</td>
+                  <td>{{ u.email }}</td>
+                  <td>{{ u.date_joined|date:"d M Y" }}</td>
+                  <td>
+                    {% if u.is_active %}
+                      <span class="badge badge-success">Active</span>
+                    {% else %}
+                      <span class="badge badge-danger">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a href="{% url 'admin-user-detail' u.pk %}" class="btn btn-xs btn-info text-white mr-1">
+                      <i class="fas fa-eye"></i> View
+                    </a>
+                    <a href="{% url 'admin-user-edit' u.pk %}" class="btn btn-xs btn-warning text-white">
+                      <i class="fas fa-edit"></i> Edit
+                    </a>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No customers registered yet.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <a href="{% url 'admin-user-list' %}" class="btn btn-default btn-sm">View All Customers</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /.recent customers row -->
+
+  </div><!-- /.container-fluid -->
+</section>
+<!-- /.content -->
+{% endblock %}
+
+{% block script %}
+// Monthly Registrations Bar Chart
+var ctx = document.getElementById('registrationChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: {{ chart_labels|safe }},
+    datasets: [{
+      label: 'New Customers',
+      data: {{ chart_values|safe }},
+      backgroundColor: 'rgba(23, 162, 184, 0.6)',
+      borderColor: 'rgba(23, 162, 184, 1)',
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      yAxes: [{ ticks: { beginAtZero: true, precision: 0 } }]
+    }
+  }
+});
+
+// Active vs Inactive Doughnut
+var pie = document.getElementById('pieChart').getContext('2d');
+new Chart(pie, {
+  type: 'doughnut',
+  data: {
+    labels: ['Active', 'Inactive'],
+    datasets: [{
+      data: [{{ active_users_count }}, {{ inactive_users_count }}],
+      backgroundColor: ['#28a745', '#dc3545'],
+      hoverBackgroundColor: ['#218838', '#c82333']
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    legend: { display: true, position: 'bottom' }
+  }
+});
+{% endblock %}

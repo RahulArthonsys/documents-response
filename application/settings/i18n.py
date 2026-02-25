@@ -2,7 +2,7 @@
 from os.path import join
 
 # Django imports
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 # project imports
 from .common import PROJECT_ROOT, MIDDLEWARE
@@ -14,9 +14,6 @@ TIME_ZONE = 'Europe/Berlin'
 
 # Internationalization
 USE_I18N = True
-
-# Localisation
-USE_L10N = True
 
 # enable timezone awareness by default
 USE_TZ = True

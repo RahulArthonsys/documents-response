@@ -1,11 +1,11 @@
 import re
+from datetime import timezone
 
 from django import template
 from django.urls import reverse, NoReverseMatch
 import json
-import pytz
 
-utc=pytz.UTC
+utc = timezone.utc
 
 register = template.Library()
 

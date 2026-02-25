@@ -22,8 +22,8 @@ urlpatterns = [
         html_email_template_name='registration/password_reset_email.html'
     ), name='password_reset'),
     # path('', include('django.contrib.auth.urls')),
-    # Ckeditor urls
-    path('ckeditor/', include('ckeditor_uploader.urls')),
+    # CKEditor 5 urls
+    path('ckeditor5/', include('django_ckeditor_5.urls')),
     # user urls
     path('', include('apps.user.urls')),
     # ai chatbot urls

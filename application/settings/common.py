@@ -60,9 +60,8 @@ DEFAULT_APPS = [
     'administrator',
     'user',
     'widget_tweaks',
-    'ckeditor',
-    'ckeditor_uploader',
-    'django_crontab',
+    'ajax_datatable',
+    'django_ckeditor_5',
     'ai_chatbot',
     #keep below app in last only
     'django_cleanup',
@@ -125,6 +124,12 @@ TEMPLATES = [
 # Internationalization
 USE_I18N = False
 
+# Timezone support
+USE_TZ = True
+
+# Default primary key type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # ##### SECURITY CONFIGURATION ############################
 
 # We store the secret key here
@@ -172,28 +177,16 @@ MESSAGE_TAGS = {
     messages.ERROR: 'danger',
 }
 
-CKEDITOR_UPLOAD_PATH = "content_files/"
-CKEDITOR_CONFIGS = {
+# CKEditor 5 configuration
+CKEDITOR_5_CONFIGS = {
     'default': {
-        'toolbar': 'Custom',
-        'height': 500,
-        'width': 742,
-        'toolbar_Custom': [
-            ['Styles', 'Format', 'Bold', 'Italic', 'Underline', 'Strike', 'SpellChecker', 'Undo', 'Redo'],
-            ['Link', 'Unlink', 'Anchor'],
-            ['Image', 'Flash', 'Table', 'HorizontalRule'],
-            ['TextColor', 'BGColor'],
-            ['Smiley', 'SpecialChar'], ['Source'],
+        'toolbar': [
+            'heading', '|', 'bold', 'italic', 'link', 'bulletedList', 'numberedList',
+            'blockQuote', 'imageUpload', '|', 'undo', 'redo'
         ],
     },
-    'special': {
-        'toolbar': 'Special',
-        'toolbar_Special': [
-            ['Bold'], ['CodeSnippet'],
-        ],
-        'extraPlugins': 'codesnippet',
-    }
 }
+CKEDITOR_5_FILE_UPLOAD_PERMISSION = 'staff'  # 'staff', 'authenticated', 'any'
 
 
 # finally grab the SECRET KEY
@@ -210,7 +203,6 @@ except IOError:
     except IOError:
         raise Exception('Could not open %s for writing!' % SECRET_FILE)
 
-# USE_TZ = True
 # TIME_ZONE = 'Asia/Kolkata'
 
 # added for user profile image resize/compress

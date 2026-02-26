@@ -2,16 +2,20 @@
 {% load static %}
 
 {% block body %}
-<!-- Content Header (Page header) -->
+<!-- Content Header -->
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
+    <div class="row align-items-center">
       <div class="col-sm-6">
-        <h1 class="m-0 text-dark">Dashboard</h1>
+        <h1 class="m-0" style="font-weight:800;color:#0f172a;letter-spacing:-0.5px;">
+          <i class="fas fa-tachometer-alt mr-2" style="color:#4f8ef7;font-size:1.1rem;"></i>Dashboard
+        </h1>
+        <p class="text-muted mb-0" style="font-size:.82rem;margin-top:2px;">Welcome back, Administrator</p>
       </div>
       <div class="col-sm-6">
-        <ol class="breadcrumb float-sm-right">
-          <li class="breadcrumb-item active">Dashboard</li>
+        <ol class="breadcrumb float-sm-right" style="background:transparent;padding:0;margin:0;">
+          <li class="breadcrumb-item"><a href="#" style="color:#4f8ef7;">Home</a></li>
+          <li class="breadcrumb-item active" style="color:#94a3b8;">Dashboard</li>
         </ol>
       </div>
     </div>
@@ -27,13 +31,13 @@
 
       <!-- Total Customers -->
       <div class="col-lg-3 col-6">
-        <div class="small-box bg-info">
+        <div class="small-box" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;">
           <div class="inner">
             <h3>{{ users_count }}</h3>
             <p>Total Customers</p>
           </div>
           <div class="icon"><i class="fas fa-users"></i></div>
-          <a href="{% url 'admin-user-list' %}" class="small-box-footer">
+          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             More info <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
@@ -41,13 +45,13 @@
 
       <!-- Active Customers -->
       <div class="col-lg-3 col-6">
-        <div class="small-box bg-success">
+        <div class="small-box" style="background:linear-gradient(135deg,#22c55e,#4ade80);color:#fff;">
           <div class="inner">
             <h3>{{ active_users_count }}</h3>
             <p>Active Customers</p>
           </div>
           <div class="icon"><i class="fas fa-user-check"></i></div>
-          <a href="{% url 'admin-user-list' %}" class="small-box-footer">
+          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             More info <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
@@ -55,14 +59,28 @@
 
       <!-- New This Month -->
       <div class="col-lg-3 col-6">
-        <div class="small-box bg-warning">
+        <div class="small-box" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;">
           <div class="inner">
             <h3>{{ new_users_count }}</h3>
             <p>New (Last 30 Days)</p>
           </div>
           <div class="icon"><i class="fas fa-user-plus"></i></div>
-          <a href="{% url 'admin-user-add' %}" class="small-box-footer">
+          <a href="{% url 'admin-user-add' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             Add Customer <i class="fas fa-arrow-circle-right"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Inactive Customers -->
+      <div class="col-lg-3 col-6">
+        <div class="small-box" style="background:linear-gradient(135deg,#ef4444,#f87171);color:#fff;">
+          <div class="inner">
+            <h3>{{ inactive_users_count }}</h3>
+            <p>Inactive Customers</p>
+          </div>
+          <div class="icon"><i class="fas fa-user-slash"></i></div>
+          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
+            View List <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
       </div>
@@ -75,13 +93,13 @@
 
       <!-- Total Plans -->
       <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:#6f42c1;color:#fff;">
+        <div class="small-box" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa);color:#fff;">
           <div class="inner">
             <h3>{{ plans_count }}</h3>
             <p>Total Plans</p>
           </div>
           <div class="icon"><i class="fas fa-tags"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             Manage Plans <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
@@ -89,13 +107,13 @@
 
       <!-- Active Plans -->
       <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:#17a2b8;color:#fff;">
+        <div class="small-box" style="background:linear-gradient(135deg,#0891b2,#22d3ee);color:#fff;">
           <div class="inner">
             <h3>{{ active_plans_count }}</h3>
             <p>Active Plans</p>
           </div>
           <div class="icon"><i class="fas fa-check-circle"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             View Plans <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
@@ -103,13 +121,13 @@
 
       <!-- Active Subscriptions -->
       <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:#e83e8c;color:#fff;">
+        <div class="small-box" style="background:linear-gradient(135deg,#db2777,#f472b6);color:#fff;">
           <div class="inner">
             <h3>{{ active_subs_count }}</h3>
             <p>Active Subscriptions</p>
           </div>
           <div class="icon"><i class="fas fa-star"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.1);">
+          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
             View Details <i class="fas fa-arrow-circle-right"></i>
           </a>
         </div>
@@ -122,10 +140,12 @@
     <div class="row">
       <div class="col-md-8">
         <div class="card card-info">
-          <div class="card-header">
-            <h3 class="card-title">Monthly Customer Registrations</h3>
+          <div class="card-header" style="background:linear-gradient(90deg,#4f8ef7,#6366f1);">
+            <h3 class="card-title text-white">
+              <i class="fas fa-chart-bar mr-2"></i>Monthly Customer Registrations
+            </h3>
           </div>
-          <div class="card-body">
+          <div class="card-body" style="background:#fff;">
             <canvas id="registrationChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
           </div>
         </div>
@@ -133,10 +153,12 @@
 
       <div class="col-md-4">
         <div class="card card-primary">
-          <div class="card-header">
-            <h3 class="card-title">Active vs Inactive</h3>
+          <div class="card-header" style="background:linear-gradient(90deg,#6366f1,#818cf8);">
+            <h3 class="card-title text-white">
+              <i class="fas fa-chart-pie mr-2"></i>Active vs Inactive
+            </h3>
           </div>
-          <div class="card-body">
+          <div class="card-body d-flex flex-column align-items-center justify-content-center" style="background:#fff;">
             <canvas id="pieChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
           </div>
         </div>
@@ -147,11 +169,14 @@
     <!-- ── Recent Subscription Plans ── -->
     <div class="row">
       <div class="col-12">
-        <div class="card card-purple">
-          <div class="card-header" style="background:#6f42c1;">
-            <h3 class="card-title text-white">Subscription Plans</h3>
+        <div class="card">
+          <div class="card-header" style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);">
+            <h3 class="card-title text-white">
+              <i class="fas fa-tags mr-2"></i>Subscription Plans
+            </h3>
             <div class="card-tools">
-              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm btn-light">
+              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm"
+                 style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3);">
                 <i class="fas fa-plus"></i> Add Plan
               </a>
             </div>
@@ -208,10 +233,13 @@
     <div class="row">
       <div class="col-12">
         <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Recently Registered Customers</h3>
+          <div class="card-header" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);">
+            <h3 class="card-title text-white">
+              <i class="fas fa-users mr-2"></i>Recently Registered Customers
+            </h3>
             <div class="card-tools">
-              <a href="{% url 'admin-user-add' %}" class="btn btn-sm btn-primary">
+              <a href="{% url 'admin-user-add' %}" class="btn btn-sm"
+                 style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3);">
                 <i class="fas fa-plus"></i> Add Customer
               </a>
             </div>
@@ -273,8 +301,11 @@
 {% endblock %}
 
 {% block script %}
-// Monthly Registrations Bar Chart
+// ── Monthly Registrations Bar Chart (Chart.js v2) ──
 var ctx = document.getElementById('registrationChart').getContext('2d');
+var gradBar = ctx.createLinearGradient(0, 0, 0, 250);
+gradBar.addColorStop(0, 'rgba(79,142,247,0.85)');
+gradBar.addColorStop(1, 'rgba(99,102,241,0.25)');
 new Chart(ctx, {
   type: 'bar',
   data: {
@@ -282,21 +313,26 @@ new Chart(ctx, {
     datasets: [{
       label: 'New Customers',
       data: {{ chart_values|safe }},
-      backgroundColor: 'rgba(23, 162, 184, 0.6)',
-      borderColor: 'rgba(23, 162, 184, 1)',
-      borderWidth: 1
+      backgroundColor: gradBar,
+      borderColor: 'rgba(79,142,247,1)',
+      borderWidth: 2
     }]
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
+    legend: { display: false },
     scales: {
-      yAxes: [{ ticks: { beginAtZero: true, precision: 0 } }]
-    }
+      xAxes: [{ gridLines: { display: false },
+                ticks: { fontColor: '#94a3b8', fontSize: 11 } }],
+      yAxes: [{ gridLines: { color: 'rgba(148,163,184,0.15)', drawBorder: false },
+                ticks: { beginAtZero: true, precision: 0, fontColor: '#94a3b8', fontSize: 11 } }]
+    },
+    animation: { duration: 1000, easing: 'easeOutQuart' }
   }
 });
 
-// Active vs Inactive Doughnut
+// ── Active vs Inactive Doughnut (Chart.js v2) ──
 var pie = document.getElementById('pieChart').getContext('2d');
 new Chart(pie, {
   type: 'doughnut',
@@ -304,14 +340,18 @@ new Chart(pie, {
     labels: ['Active', 'Inactive'],
     datasets: [{
       data: [{{ active_users_count }}, {{ inactive_users_count }}],
-      backgroundColor: ['#28a745', '#dc3545'],
-      hoverBackgroundColor: ['#218838', '#c82333']
+      backgroundColor: ['#4f8ef7', '#e2e8f0'],
+      hoverBackgroundColor: ['#6366f1', '#cbd5e1'],
+      borderWidth: 0
     }]
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    legend: { display: true, position: 'bottom' }
+    cutoutPercentage: 72,
+    legend: { display: true, position: 'bottom',
+              labels: { fontColor: '#64748b', fontSize: 12, padding: 16, usePointStyle: true } },
+    animation: { animateRotate: true, duration: 1000, easing: 'easeOutQuart' }
   }
 });
 {% endblock %}

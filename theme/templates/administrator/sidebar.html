@@ -2,15 +2,25 @@
 {% load static %}
 
 <!-- Main Sidebar Container -->
-  <aside class="main-sidebar sidebar-light-info elevation-4">
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <!-- Brand Logo -->
     <a href="{% url 'admin-dashboard' %}" class="brand-link">
-      <img src="{% static '/admin-assets/img/AdminLTELogo.png' %}" alt="AdminLTE Logo" class="brand-image img-circle elevation-3" style="opacity: .8">
-      <span class="brand-text font-weight-light">{{configs.APP_NAME}}</span>
+      <img src="{% static '/admin-assets/img/AdminLTELogo.png' %}" alt="Logo" class="brand-image img-circle elevation-3" style="opacity:.95">
+      <span class="brand-text">{{configs.APP_NAME}}</span>
     </a>
 
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div class="sidebar os-host os-theme-light">
+
+      <!-- Admin User Panel -->
+      <div class="sidebar-user-panel">
+        <div class="user-avatar">A</div>
+        <div class="user-info">
+          <div class="name">Administrator</div>
+          <div class="role">Super Admin</div>
+        </div>
+        <span class="user-status"></span>
+      </div>
 
       <!-- Sidebar Menu -->
       <nav class="mt-2">

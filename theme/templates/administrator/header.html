@@ -6,8 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{configs.APP_NAME}}</title>
 
-  <!-- Google Font: Source Sans Pro -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+  <!-- Google Fonts: Inter + Source Sans Pro -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Source+Sans+Pro:300,400,400i,700&display=swap">
   <!-- Font Awesome -->
   <link rel="stylesheet" href="{% static 'plugins/fontawesome-free/css/all.min.css' %}">
   <!-- Ionicons -->
@@ -34,5 +36,11 @@
   <link rel="stylesheet" href="{% static 'plugins/sweet-alert2/sweetalert2.css' %}">
   <link rel="stylesheet" href="{% static 'plugins/json-viewer/json-viewer.css' %}">
   <link rel="stylesheet" href="{% static 'admin-assets/css/admin-style.css' %}">
+  <script>
+    // Apply dark mode immediately to prevent flash of light theme
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.classList.add('dark-mode');
+    }
+  </script>
 
 </head>

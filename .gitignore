@@ -29,7 +29,7 @@ run/models/
 run/predictions/
 run/uploads/
 
-# ChromaDB
+# ChromaDB  
 chroma_store/
 
 # OS files

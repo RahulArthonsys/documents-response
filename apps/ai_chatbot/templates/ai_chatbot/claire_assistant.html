@@ -128,8 +128,63 @@
   <div class="container-fluid">
     <div class="row">
 
+      <!-- Conversation Sidebar -->
+      <div class="col-md-3">
+        <div class="card card-outline card-info">
+          <div class="card-header d-flex align-items-center justify-content-between py-2">
+            <h3 class="card-title mb-0"><i class="fas fa-comments mr-1"></i> Chats</h3>
+            <div>
+              <button class="btn btn-sm btn-primary" id="newChatBtn" title="Start New Chat">
+                <i class="fas fa-plus"></i>
+              </button>
+              <button class="btn btn-sm btn-danger ml-1" id="clearHistoryBtn" title="Clear All History">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body p-2" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+            {% for date_key, convs in grouped_conversations.items %}
+            <div class="mb-3">
+              <small class="text-muted font-weight-bold text-uppercase px-1">
+                {% if date_key == today %}Today
+                {% elif date_key == yesterday %}Yesterday
+                {% else %}{{ date_key|date:"M d, Y" }}
+                {% endif %}
+              </small>
+              {% for conv in convs %}
+              <div class="conversation-item d-flex align-items-center justify-content-between px-2 py-1 rounded mb-1 {% if conv.pk == current_conv_id %}bg-light border-left border-primary{% endif %}"
+                   data-conv-id="{{ conv.pk }}" style="cursor:pointer;">
+                <div class="flex-grow-1 text-truncate" style="min-width:0;"
+                     onclick="window.location.href='{% url 'claire-assistant' %}?conv_id={{ conv.pk }}'">
+                  <span class="font-weight-medium text-sm">{{ conv.title|default:"New Chat"|truncatechars:28 }}</span>
+                  <br>
+                  <small class="text-muted">
+                    <span class="message-count-display">{{ conv.message_count }}</span> msgs
+                  </small>
+                </div>
+                <button class="btn btn-xs btn-outline-danger ml-1 delete-conv-btn"
+                        data-conv-id="{{ conv.pk }}" title="Delete"
+                        onclick="event.stopPropagation(); deleteConversation({{ conv.pk }});">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              {% endfor %}
+            </div>
+            {% empty %}
+            <p class="text-muted text-sm text-center mt-3">No conversations yet.</p>
+            {% endfor %}
+          </div>
+          <!-- Midnight countdown (hidden by default) -->
+          <div class="card-footer py-1 text-center" id="midnightCountdown" style="display:none;">
+            <small class="text-info">
+              <i class="fas fa-sync-alt"></i> <span id="countdownText">Calculating...</span>
+            </small>
+          </div>
+        </div>
+      </div>
+
       <!-- Chat Panel -->
-      <div class="col-md-9">
+      <div class="col-md-6">
         <div class="card card-primary card-outline direct-chat direct-chat-primary">
           <div class="card-header">
             <h3 class="card-title">
@@ -137,7 +192,7 @@
               {{ conversation.title|default:"New Conversation" }}
             </h3>
             <div class="card-tools">
-              <a href="{% url 'claire-new-conversation' %}" class="btn btn-outline-secondary btn-sm"
+              <a href="{% url 'claire-assistant' %}?new=1" class="btn btn-outline-secondary btn-sm"
                  title="Start new conversation">
                 <i class="fas fa-plus mr-1"></i> New Chat
               </a>
@@ -234,7 +289,7 @@
             <p class="text-sm mb-1"><strong>Session:</strong></p>
             <p class="text-muted text-sm">#{{ conversation.pk }}</p>
             <p class="text-sm mb-1"><strong>Messages:</strong></p>
-            <p class="text-muted text-sm" id="msgCount">{{ chat_messages.count }}</p>
+            <p class="text-muted text-sm" id="msgCount">{{ chat_messages|length }}</p>
           </div>
         </div>
 
@@ -663,5 +718,166 @@
   scrollToBottom();
   chatInput.focus();
 })();
+
+// ══════════════════════════════════════════════════════════
+// Midnight Auto-Reset — Countdown & Auto-Refresh
+// ══════════════════════════════════════════════════════════
+(function setupMidnightRefresh() {
+  var countdownEl = document.getElementById('countdownText');
+  var countdownContainer = document.getElementById('midnightCountdown');
+
+  function getMsUntilMidnight() {
+    var now = new Date();
+    var midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return midnight.getTime() - now.getTime();
+  }
+
+  function formatTime(ms) {
+    var totalSec = Math.floor(ms / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+    if (m > 0) return m + 'm ' + s + 's';
+    return s + 's';
+  }
+
+  function updateCountdown() {
+    var ms = getMsUntilMidnight();
+    if (countdownEl) {
+      countdownEl.textContent = 'Fresh chat in ' + formatTime(ms);
+    }
+    return ms;
+  }
+
+  function checkMidnightReset() {
+    var ms = updateCountdown();
+
+    // Show countdown when less than 5 minutes remain
+    if (ms <= 300000 && countdownContainer) {
+      countdownContainer.style.display = 'block';
+    }
+
+    if (ms <= 1000) {
+      // Midnight reached — show alert and reload
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: 'New Day, Fresh Chat!',
+          text: 'It\'s midnight — starting a fresh conversation for you.',
+          icon: 'info',
+          timer: 3000,
+          showConfirmButton: false,
+          allowOutsideClick: false,
+        }).then(function() {
+          window.location.href = '{% url "claire-assistant" %}';
+        });
+      } else {
+        window.location.href = '{% url "claire-assistant" %}';
+      }
+      return;
+    }
+
+    // Schedule next check
+    var nextCheck = ms <= 60000 ? 1000 : 60000;
+    setTimeout(checkMidnightReset, nextCheck);
+  }
+
+  checkMidnightReset();
+})();
+
+// ══════════════════════════════════════════════════════════
+// New Chat, Delete & Clear History
+// ══════════════════════════════════════════════════════════
+
+// New Chat Button
+var newChatBtn = document.getElementById('newChatBtn');
+if (newChatBtn) {
+  newChatBtn.addEventListener('click', function() {
+    window.location.href = '{% url "claire-assistant" %}?new=1';
+  });
+}
+
+// Delete Single Conversation
+function deleteConversation(conversationId) {
+  var confirmDelete = typeof Swal !== 'undefined'
+    ? Swal.fire.bind(Swal)
+    : function(opts) { return Promise.resolve({value: confirm(opts.title)}); };
+
+  confirmDelete({
+    title: 'Delete Conversation?',
+    text: 'This will permanently delete this conversation and its messages.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    confirmButtonText: 'Delete!',
+  }).then(function(result) {
+    if (!result.value) return;
+
+    var formData = new FormData();
+    formData.append('conv_id', conversationId);
+
+    fetch('{% url "claire-delete-conversation" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+      body: formData,
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.status === 'ok') {
+        // Remove from sidebar DOM
+        var items = document.querySelectorAll('.conversation-item[data-conv-id="' + conversationId + '"]');
+        items.forEach(function(el) { el.remove(); });
+        // If deleted was current, redirect to fresh chat
+        if (conversationId == {{ current_conv_id|default:"0" }}) {
+          window.location.href = '{% url "claire-assistant" %}';
+        }
+      } else {
+        alert(data.message || 'Failed to delete.');
+      }
+    })
+    .catch(function() { alert('Network error.'); });
+  });
+}
+
+// Clear All History
+var clearHistoryBtn = document.getElementById('clearHistoryBtn');
+if (clearHistoryBtn) {
+  clearHistoryBtn.addEventListener('click', function() {
+    var confirmClear = typeof Swal !== 'undefined'
+      ? Swal.fire.bind(Swal)
+      : function(opts) { return Promise.resolve({value: confirm(opts.title)}); };
+
+    confirmClear({
+      title: 'Clear All Chat History?',
+      text: 'This will permanently delete ALL your conversations.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      confirmButtonText: 'Clear All!',
+    }).then(function(result) {
+      if (!result.value) return;
+
+      fetch('{% url "claire-clear-history" %}', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}',
+          'Content-Type': 'application/json',
+        },
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === 'ok') {
+          window.location.href = data.redirect_url || '{% url "claire-assistant" %}';
+        } else {
+          alert(data.message || 'Failed to clear history.');
+        }
+      })
+      .catch(function() { alert('Network error.'); });
+    });
+  });
+}
 </script>
+<!-- SweetAlert2 for midnight popup (optional — works without it too) -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 {% endblock %}

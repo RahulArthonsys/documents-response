@@ -25,11 +25,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from django.conf import settings
 
+from datetime import timedelta
+from django.urls import reverse
+from django.utils import timezone
+
 from .models import (
     KnowledgeDocument, Conversation, ConversationMessage,
     SessionDocument, AgentPromptConfig,
 )
 from . import vector_utils
+from .chat_utils import auto_reset_user_chat_at_midnight, is_conversation_expired
 
 logger = logging.getLogger(__name__)
 
@@ -900,32 +905,89 @@ class KnowledgeDocumentDeleteView(LoginRequiredMixin, View):
 
 
 class ClaireAssistantView(LoginRequiredMixin, View):
-    """Main Claire chatbot interface."""
+    """Main Claire chatbot interface with midnight auto-reset."""
     login_url = 'admin-login'
     template_name = 'ai_chatbot/claire_assistant.html'
 
-    def get(self, request):
-        conversation_id = request.session.get('current_conversation_id')
-        conversation = None
-        if conversation_id:
-            try:
-                conversation = Conversation.objects.get(pk=conversation_id, user=request.user)
-            except Conversation.DoesNotExist:
-                conversation = None
+    def get_current_conversation(self, request, redirect_on_new=False):
+        """Get or create current active conversation.
 
-        if conversation is None:
-            conversation = Conversation.objects.create(
+        Handles three scenarios:
+          1. ?new=1 → Create a fresh conversation
+          2. ?conv_id=X → Switch to conversation X
+          3. Normal visit → auto_reset_user_chat_at_midnight()
+        """
+        conv_id = request.GET.get('conv_id')
+        new_chat = request.GET.get('new')
+
+        # SCENARIO 1: User clicked "New Chat" button → ?new=1
+        if new_chat == '1':
+            new_conv = Conversation.objects.create(
                 user=request.user,
-                title='New Conversation'
+                title='New Chat',
+                started_at=timezone.now(),
             )
-            request.session['current_conversation_id'] = conversation.pk
+            request.session['current_conversation_id'] = new_conv.pk
+            if redirect_on_new:
+                return new_conv, True
+            return new_conv
 
-        messages_qs = conversation.messages.all().order_by('timestamp')
-        session_docs = SessionDocument.objects.filter(conversation=conversation)
+        # SCENARIO 2: User clicked a conversation in sidebar → ?conv_id=X
+        if conv_id:
+            conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+            request.session['current_conversation_id'] = conv.pk
+            if redirect_on_new:
+                return conv, False
+            return conv
+
+        # SCENARIO 3: Normal visit — check midnight reset
+        conv, was_reset = auto_reset_user_chat_at_midnight(request.user)
+        if was_reset:
+            request.session['current_conversation_id'] = conv.pk
+        if redirect_on_new:
+            return conv, False
+        return conv
+
+    def get(self, request):
+        conv, needs_redirect = self.get_current_conversation(request, redirect_on_new=True)
+
+        # Redirect to clean URL after creating new chat (prevent duplicate on refresh)
+        if needs_redirect:
+            return redirect(f"{reverse('claire-assistant')}?conv_id={conv.pk}")
+
+        # Run auto-reset to get the active chat
+        active_chat, was_reset = auto_reset_user_chat_at_midnight(request.user)
+        if was_reset:
+            request.session['current_conversation_id'] = active_chat.pk
+
+        # Get all conversations for sidebar history
+        history = Conversation.objects.filter(user=request.user).order_by('-started_at')
+
+        # Group conversations by date (Today, Yesterday, older dates)
+        grouped_conversations = {}
+        today = timezone.now().date()
+        yesterday = today - timedelta(days=1)
+
+        for conversation in history:
+            started = conversation.started_at or conversation.created_at
+            date_key = started.date() if started else today
+            if date_key not in grouped_conversations:
+                grouped_conversations[date_key] = []
+            grouped_conversations[date_key].append(conversation)
+
+        messages_qs = conv.messages.all().order_by('timestamp') if conv else []
+        session_docs = SessionDocument.objects.filter(conversation=conv) if conv else []
+
         return render(request, self.template_name, {
-            'conversation': conversation,
+            'conversation': conv,
             'chat_messages': messages_qs,
             'session_documents': session_docs,
+            'history_list': history,
+            'current_conv_id': conv.pk if conv else None,
+            'grouped_conversations': grouped_conversations,
+            'today': today,
+            'yesterday': yesterday,
+            'active_chat_id': active_chat.pk,
         })
 
 
@@ -1076,18 +1138,56 @@ class SessionFileUploadView(LoginRequiredMixin, View):
 
 
 class ClaireNewConversationView(LoginRequiredMixin, View):
-    """Start a new conversation (clears session reference)."""
+    """Start a new conversation."""
     login_url = 'admin-login'
 
     def post(self, request):
-        if 'current_conversation_id' in request.session:
-            del request.session['current_conversation_id']
-        return JsonResponse({'status': 'ok'})
+        new_conv = Conversation.objects.create(
+            user=request.user,
+            title='New Chat',
+            started_at=timezone.now(),
+        )
+        request.session['current_conversation_id'] = new_conv.pk
+        return JsonResponse({'status': 'ok', 'conv_id': new_conv.pk})
 
     def get(self, request):
-        if 'current_conversation_id' in request.session:
-            del request.session['current_conversation_id']
-        return redirect('claire-assistant')
+        return redirect(f"{reverse('claire-assistant')}?new=1")
+
+
+class ClaireDeleteConversationAjaxView(LoginRequiredMixin, View):
+    """Delete a single conversation via AJAX."""
+    login_url = 'admin-login'
+
+    def post(self, request):
+        conv_id = request.POST.get('conv_id') or request.GET.get('conv_id')
+        if not conv_id:
+            return JsonResponse({'status': 'error', 'message': 'Conversation ID is required'}, status=400)
+
+        try:
+            conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+            conv.delete()
+            # If deleted conversation was current, clear session
+            if str(request.session.get('current_conversation_id')) == str(conv_id):
+                request.session.pop('current_conversation_id', None)
+            return JsonResponse({'status': 'ok', 'message': 'Conversation deleted successfully'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+class ClaireClearHistoryView(LoginRequiredMixin, View):
+    """Delete all conversations for the current user."""
+    login_url = 'admin-login'
+
+    def post(self, request):
+        try:
+            conversations = Conversation.objects.filter(user=request.user)
+            count = conversations.count()
+            conversations.delete()
+            request.session.pop('current_conversation_id', None)
+            logger.info(f"Cleared {count} conversations for user {request.user}")
+            return JsonResponse({'status': 'ok', 'redirect_url': reverse('claire-assistant')})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
 class ClaireHistoryView(LoginRequiredMixin, View):

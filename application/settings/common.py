@@ -92,9 +92,11 @@ MIDDLEWARE = [
     'application.custom_classes.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'apps.ai_chatbot.session_middleware.SessionErrorHandlerMiddleware',  # Handle corrupted sessions
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.ai_chatbot.middleware.AutoResetChatMiddleware',               # Auto-reset chat at midnight
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

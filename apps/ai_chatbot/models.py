@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.dispatch import receiver
 from django.db.models.signals import post_delete
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class Conversation(models.Model):
         related_name='conversations'
     )
     title = models.CharField(max_length=255, blank=True, null=True)
+    started_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -83,6 +85,17 @@ class Conversation(models.Model):
 
     def __str__(self):
         return self.title or f"Conversation #{self.pk} ({self.user})"
+
+    def is_from_today(self):
+        """Check if this conversation started today (after midnight)."""
+        from datetime import datetime, time
+        today_midnight = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        conv_started = self.started_at or self.created_at
+        if conv_started and timezone.is_naive(conv_started):
+            conv_started = timezone.make_aware(conv_started)
+
+        return conv_started >= today_midnight if conv_started else False
 
     @property
     def message_count(self):

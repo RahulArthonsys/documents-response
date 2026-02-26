@@ -12,6 +12,8 @@ urlpatterns = [
     path('ai/claire/ask/', views.ClaireAskView.as_view(), name='claire-ask'),
     path('ai/claire/upload/', views.SessionFileUploadView.as_view(), name='claire-session-upload'),
     path('ai/claire/new/', views.ClaireNewConversationView.as_view(), name='claire-new-conversation'),
+    path('ai/claire/delete-conversation/', views.ClaireDeleteConversationAjaxView.as_view(), name='claire-delete-conversation'),
+    path('ai/claire/clear-history/', views.ClaireClearHistoryView.as_view(), name='claire-clear-history'),
 
     # Claire History
     path('ai/history/', views.ClaireHistoryView.as_view(), name='claire-history'),

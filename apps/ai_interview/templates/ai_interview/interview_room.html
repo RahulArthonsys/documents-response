@@ -1,0 +1,946 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block static %}
+<style>
+    /* ── Layout: 3-column ── */
+    .interview-room {
+        display: flex;
+        gap: 16px;
+        min-height: 80vh;
+    }
+    .col-video   { flex: 0 0 38%; max-width: 38%; display: flex; flex-direction: column; gap: 12px; }
+    .col-chat    { flex: 0 0 32%; max-width: 32%; display: flex; flex-direction: column; }
+    .col-control { flex: 0 0 30%; max-width: 30%; display: flex; flex-direction: column; gap: 12px; }
+
+    /* ── Video ── */
+    .video-box {
+        background: #1a1a2e;
+        border-radius: 14px;
+        overflow: hidden;
+        position: relative;
+        aspect-ratio: 4/3;
+    }
+    .video-box video { width: 100%; height: 100%; object-fit: cover; }
+    .video-label {
+        position: absolute; bottom: 10px; left: 12px;
+        background: rgba(0,0,0,0.55); color: #fff; padding: 3px 10px;
+        border-radius: 6px; font-size: 0.78rem; font-weight: 600;
+    }
+    .timer-badge {
+        position: absolute; top: 10px; right: 12px;
+        background: rgba(0,0,0,0.5); color: #fff; padding: 3px 10px;
+        border-radius: 6px; font-size: 0.85rem;
+    }
+    .rec-badge {
+        position: absolute; top: 10px; left: 12px;
+        background: rgba(229,57,53,0.85); color: #fff; padding: 3px 10px;
+        border-radius: 16px; font-size: 0.78rem;
+        display: none; align-items: center; gap: 5px;
+    }
+    .rec-badge .dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .video-controls {
+        display: flex; justify-content: center; gap: 10px;
+        position: absolute; bottom: 10px; left: 0; right: 0;
+    }
+    .vc-btn {
+        width: 42px; height: 42px; border-radius: 50%; border: none;
+        color: #fff; font-size: 1rem; cursor: pointer; display: flex;
+        align-items: center; justify-content: center; transition: transform 0.15s;
+    }
+    .vc-btn:hover { transform: scale(1.12); }
+    .vc-btn.mic-on  { background: #4caf50; }
+    .vc-btn.mic-off { background: #e53935; }
+    .vc-btn.cam-on  { background: #2196f3; }
+    .vc-btn.cam-off { background: #e53935; }
+
+    /* ── AI Girl Interviewer Avatar ── */
+    .bot-video-box {
+        background: linear-gradient(160deg, #0d1b3e 0%, #1a2a5e 50%, #0d2040 100%);
+        border-radius: 14px;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        aspect-ratio: 4/3; position: relative;
+        overflow: hidden;
+    }
+    /* Subtle office bookshelf / wall decoration */
+    .bot-video-box::before {
+        content: '';
+        position: absolute; inset: 0;
+        background:
+            radial-gradient(ellipse at 20% 80%, rgba(100,60,180,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 20%, rgba(30,100,200,0.2) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    /* Desk bottom strip */
+    .bot-video-box::after {
+        content: '';
+        position: absolute; bottom: 0; left: 0; right: 0; height: 28px;
+        background: linear-gradient(180deg, #1a1000 0%, #2a1800 100%);
+        border-radius: 0 0 14px 14px;
+    }
+    .bot-avatar {
+        width: 140px; height: 140px; border-radius: 50%;
+        background: transparent;
+        display: flex; align-items: center; justify-content: center;
+        position: relative; z-index: 1;
+        transition: box-shadow 0.3s;
+    }
+    .bot-avatar svg {
+        width: 140px; height: 155px;
+        filter: drop-shadow(0 6px 16px rgba(0,0,0,0.5));
+    }
+    .bot-avatar.speaking {
+        box-shadow: 0 0 0 10px rgba(255,255,255,0.18), 0 0 0 20px rgba(255,255,255,0.08);
+        animation: speakPulse 1.2s infinite;
+    }
+    @keyframes speakPulse {
+        0%,100% { box-shadow: 0 0 0 10px rgba(255,255,255,0.18), 0 0 0 20px rgba(255,255,255,0.08); }
+        50%     { box-shadow: 0 0 0 16px rgba(255,255,255,0.28), 0 0 0 30px rgba(255,255,255,0.1); }
+    }
+    .bot-name {
+        color: #fff; font-weight: 700; margin-top: 10px; font-size: 1rem;
+        position: relative; z-index: 1;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    }
+    .bot-status {
+        color: rgba(255,255,255,0.8); font-size: 0.8rem; margin-top: 2px;
+        position: relative; z-index: 1;
+    }
+    .bot-badge {
+        position: relative; z-index: 1;
+        background: linear-gradient(135deg,#e91e8c,#9c27b0);
+        color: #fff; font-size: 0.65rem; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px; letter-spacing: 0.5px;
+        margin-top: 3px;
+    }
+
+    /* ── Conversation Chat ── */
+    .chat-panel {
+        background: #fff; border-radius: 14px;
+        box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+        display: flex; flex-direction: column; flex: 1; overflow: hidden;
+    }
+    .chat-header {
+        padding: 14px 18px; border-bottom: 1px solid #eee;
+        font-weight: 700; color: #333; font-size: 0.95rem;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .chat-header i { color: #667eea; }
+    .chat-messages {
+        flex: 1; overflow-y: auto; padding: 16px;
+        display: flex; flex-direction: column; gap: 12px;
+        max-height: 62vh;
+    }
+    .chat-msg {
+        display: flex; gap: 10px; max-width: 92%;
+        animation: fadeInMsg 0.35s ease;
+    }
+    @keyframes fadeInMsg {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .chat-msg.bot  { align-self: flex-start; }
+    .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+
+    .msg-avatar {
+        width: 34px; height: 34px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.85rem; color: #fff; flex-shrink: 0;
+    }
+    .msg-avatar.bot-av  { background: linear-gradient(135deg,#667eea,#764ba2); }
+    .msg-avatar.user-av { background: linear-gradient(135deg,#43a047,#66bb6a); }
+
+    .msg-bubble {
+        padding: 10px 14px; border-radius: 12px;
+        font-size: 0.9rem; line-height: 1.5;
+    }
+    .chat-msg.bot  .msg-bubble { background: #f0f4ff; color: #333; border-bottom-left-radius: 4px; }
+    .chat-msg.user .msg-bubble { background: #e8f5e9; color: #333; border-bottom-right-radius: 4px; }
+
+    .msg-meta {
+        font-size: 0.7rem; color: #aaa; margin-top: 3px;
+    }
+    .chat-msg.bot  .msg-meta { text-align: left; }
+    .chat-msg.user .msg-meta { text-align: right; }
+
+    .typing-indicator {
+        display: none; align-self: flex-start; padding: 8px 14px;
+        background: #f0f4ff; border-radius: 12px; gap: 4px;
+        margin: 0 16px 10px;
+    }
+    .typing-indicator.show { display: flex; }
+    .typing-dot {
+        width: 6px; height: 6px; border-radius: 50%; background: #667eea;
+        animation: typingBounce 1.4s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typingBounce {
+        0%,60%,100% { transform: translateY(0); }
+        30% { transform: translateY(-6px); }
+    }
+
+    /* ── Right Control Panel ── */
+    .ctrl-card {
+        background: #fff; border-radius: 14px;
+        box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+        padding: 18px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .ctrl-card h6 { margin: 0; font-weight: 700; color: #333; font-size: 0.9rem; }
+
+    /* Progress */
+    .progress-mini { height: 6px; border-radius: 3px; background: #e9ecef; }
+    .progress-mini .bar {
+        height: 100%; border-radius: 3px;
+        background: linear-gradient(135deg,#667eea,#764ba2);
+        transition: width 0.5s;
+    }
+    .prog-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
+
+    /* Question display */
+    .q-counter {
+        background: linear-gradient(135deg,#667eea,#764ba2);
+        color: #fff; padding: 4px 12px; border-radius: 14px;
+        font-size: 0.78rem; font-weight: 600; display: inline-block;
+    }
+    .q-category {
+        background: #f0f4ff; color: #667eea; padding: 3px 10px;
+        border-radius: 6px; font-size: 0.75rem; font-weight: 600;
+        display: inline-block; margin-left: 6px;
+    }
+    .q-text {
+        font-size: 1rem; color: #333; line-height: 1.55; margin: 10px 0 0;
+    }
+
+    /* Mic / answer area */
+    .speak-area {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 10px; padding: 10px 0;
+    }
+    .big-mic-btn {
+        width: 72px; height: 72px; border-radius: 50%;
+        border: none; color: #fff; font-size: 1.6rem;
+        cursor: pointer; display: flex; align-items: center;
+        justify-content: center; transition: transform 0.2s, box-shadow 0.2s;
+        background: linear-gradient(135deg,#e53935,#ff5722);
+    }
+    .big-mic-btn:hover { transform: scale(1.08); box-shadow: 0 4px 20px rgba(229,57,53,0.35); }
+    .big-mic-btn.listening {
+        background: linear-gradient(135deg,#ff5722,#ff9800);
+        animation: micPulse 1.2s infinite;
+    }
+    @keyframes micPulse {
+        0%,100% { box-shadow: 0 0 0 0 rgba(255,87,34,0.4); }
+        50%     { box-shadow: 0 0 0 14px rgba(255,87,34,0); }
+    }
+    .big-mic-btn.disabled-mic {
+        background: #bbb; cursor: not-allowed;
+    }
+    .mic-label {
+        font-size: 0.82rem; color: #888; font-weight: 500;
+    }
+    .transcript-preview {
+        width: 100%; min-height: 60px; max-height: 100px;
+        border: 1.5px solid #e0e0e0; border-radius: 10px;
+        padding: 10px; font-size: 0.88rem; resize: none;
+        transition: border-color 0.2s; overflow-y: auto;
+    }
+    .transcript-preview:focus { border-color: #667eea; outline: none; }
+
+    .action-row {
+        display: flex; gap: 8px; width: 100%;
+    }
+    .btn-submit-a {
+        flex: 1; background: linear-gradient(135deg,#667eea,#764ba2);
+        border: none; color: #fff; padding: 10px; border-radius: 8px;
+        font-weight: 600; cursor: pointer; transition: transform 0.15s;
+        font-size: 0.9rem;
+    }
+    .btn-submit-a:hover { transform: translateY(-1px); color: #fff; }
+    .btn-submit-a:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-skip-a {
+        background: #f5f5f5; border: 1px solid #ddd; color: #777;
+        padding: 10px 16px; border-radius: 8px; font-weight: 600;
+        cursor: pointer; font-size: 0.9rem;
+    }
+
+    /* Score pills */
+    .score-pill { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; margin-right: 4px; }
+    .score-pill.good   { background: #e8f5e9; color: #2e7d32; }
+    .score-pill.medium { background: #fff3e0; color: #e65100; }
+    .score-pill.low    { background: #fce4ec; color: #c62828; }
+
+    .live-fb {
+        background: #f8f9fa; border-radius: 10px; padding: 12px;
+        display: none; font-size: 0.85rem;
+    }
+    .live-fb.show { display: block; }
+
+    /* Volume visualizer */
+    .vol-bars {
+        display: flex; gap: 2px; align-items: flex-end; height: 24px; margin-top: 4px;
+    }
+    .vol-bar {
+        width: 4px; background: #667eea; border-radius: 2px;
+        transition: height 0.1s;
+    }
+
+    @media (max-width: 1100px) {
+        .interview-room { flex-direction: column; }
+        .col-video, .col-chat, .col-control { max-width: 100%; flex: 1 1 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<section class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1><i class="fas fa-video mr-2"></i>Live Interview — {{ interview.candidate_name }}</h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item"><a href="{% url 'ai-interview-dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Interview Room</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="content">
+<div class="interview-room">
+
+    <!-- ═══ Column 1 — Video Feeds ═══ -->
+    <div class="col-video">
+        <!-- AI Girl Interviewer -->
+        <div class="bot-video-box" id="botBox">
+            <div class="bot-avatar" id="botAvatar">
+                <!-- Professional Female SVG Avatar -->
+                <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
+                  <!-- Hair back layer -->
+                  <ellipse cx="100" cy="80" rx="58" ry="68" fill="#2c1505"/>
+                  <!-- Side hair flowing down -->
+                  <path d="M44,85 Q28,140 36,195 Q50,210 62,215" stroke="#2c1505" stroke-width="20" fill="none" stroke-linecap="round"/>
+                  <path d="M156,85 Q172,140 164,195 Q150,210 138,215" stroke="#2c1505" stroke-width="20" fill="none" stroke-linecap="round"/>
+                  <!-- Shoulders / blazer -->
+                  <path d="M10,220 Q15,178 55,168 L80,162 L100,172 L120,162 L145,168 Q185,178 190,220 Z" fill="#1e2d5a"/>
+                  <!-- Lapels -->
+                  <path d="M80,162 L100,182 L120,162 L116,192 L100,204 L84,192 Z" fill="#14203f"/>
+                  <!-- White shirt strip -->
+                  <path d="M93,172 L100,182 L107,172 L107,220 L93,220 Z" fill="#f0f0f0"/>
+                  <!-- Neck -->
+                  <rect x="85" y="152" width="30" height="32" rx="8" fill="#f5c5a0"/>
+                  <!-- Face -->
+                  <ellipse cx="100" cy="108" rx="48" ry="56" fill="#f5c5a0"/>
+                  <!-- Hair front top -->
+                  <ellipse cx="100" cy="56" rx="48" ry="33" fill="#2c1505"/>
+                  <!-- Side face hair overlay -->
+                  <ellipse cx="53" cy="100" rx="12" ry="20" fill="#2c1505"/>
+                  <ellipse cx="147" cy="100" rx="12" ry="20" fill="#2c1505"/>
+                  <!-- Hair highlight sheen -->
+                  <ellipse cx="88" cy="52" rx="20" ry="10" fill="#5c3010" opacity="0.55"/>
+                  <!-- Ears -->
+                  <ellipse cx="52" cy="110" rx="8" ry="11" fill="#ebb090"/>
+                  <ellipse cx="148" cy="110" rx="8" ry="11" fill="#ebb090"/>
+                  <!-- Pearl earrings -->
+                  <circle cx="52" cy="125" r="5.5" fill="#fffef8" stroke="#d4aa60" stroke-width="1.5"/>
+                  <circle cx="148" cy="125" r="5.5" fill="#fffef8" stroke="#d4aa60" stroke-width="1.5"/>
+                  <!-- Eyebrows -->
+                  <path d="M70,89 Q82,82 94,87" stroke="#2c1505" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                  <path d="M106,87 Q118,82 130,89" stroke="#2c1505" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                  <!-- Eye whites -->
+                  <ellipse cx="82" cy="103" rx="12" ry="10.5" fill="#fff"/>
+                  <ellipse cx="118" cy="103" rx="12" ry="10.5" fill="#fff"/>
+                  <!-- Irises -->
+                  <circle cx="82" cy="104" r="8" fill="#6b3a1f"/>
+                  <circle cx="118" cy="104" r="8" fill="#6b3a1f"/>
+                  <!-- Pupils -->
+                  <circle cx="82" cy="104" r="4.5" fill="#110500"/>
+                  <circle cx="118" cy="104" r="4.5" fill="#110500"/>
+                  <!-- Eye sparkle -->
+                  <circle cx="84.5" cy="101.5" r="2.2" fill="#fff"/>
+                  <circle cx="120.5" cy="101.5" r="2.2" fill="#fff"/>
+                  <!-- Upper eyelashes -->
+                  <path d="M70,96 Q76,89 82,91 Q88,89 94,96" stroke="#110500" stroke-width="2.5" fill="none"/>
+                  <path d="M106,96 Q112,89 118,91 Q124,89 130,96" stroke="#110500" stroke-width="2.5" fill="none"/>
+                  <!-- Lower eyelid -->
+                  <path d="M71,110 Q82,116 93,110" stroke="#c4906a" stroke-width="1" fill="none"/>
+                  <path d="M107,110 Q118,116 129,110" stroke="#c4906a" stroke-width="1" fill="none"/>
+                  <!-- Nose -->
+                  <path d="M100,114 Q96,126 93,130 Q100,134 107,130 Q104,126 100,114" fill="#ebb090"/>
+                  <ellipse cx="94" cy="130" rx="4.5" ry="3" fill="#d9956e"/>
+                  <ellipse cx="107" cy="130" rx="4.5" ry="3" fill="#d9956e"/>
+                  <!-- Blush cheeks -->
+                  <ellipse cx="66" cy="122" rx="17" ry="10" fill="#f48fb1" opacity="0.28"/>
+                  <ellipse cx="134" cy="122" rx="17" ry="10" fill="#f48fb1" opacity="0.28"/>
+                  <!-- Lips upper -->
+                  <path d="M82,144 Q91,137 100,140 Q109,137 118,144 Q109,147 100,146 Q91,147 82,144" fill="#d4437a"/>
+                  <!-- Lips lower / jaw -->
+                  <ellipse id="mouthOpen" cx="100" cy="148" rx="17" ry="2" fill="#b83060"/>
+                  <!-- Teeth hint -->
+                  <ellipse id="teethEl" cx="100" cy="145" rx="12" ry="1" fill="#fff" opacity="0"/>
+                </svg>
+            </div>
+            <div class="bot-name">Sarah</div>
+            <div class="bot-badge">AI INTERVIEWER</div>
+            <div class="bot-status" id="botStatus">Ready</div>
+            <div class="video-label"><i class="fas fa-user-circle mr-1"></i> Sarah — AI Interviewer</div>
+        </div>
+
+        <!-- Candidate Camera -->
+        <div class="video-box">
+            <video id="localVideo" autoplay muted playsinline></video>
+            <div class="rec-badge" id="recBadge"><span class="dot"></span> REC</div>
+            <div class="timer-badge" id="timerBadge">00:00</div>
+            <div class="video-label"><i class="fas fa-user mr-1"></i> {{ interview.candidate_name }}</div>
+            <div class="video-controls">
+                <button class="vc-btn mic-on" id="btnMic" title="Mic"><i class="fas fa-microphone"></i></button>
+                <button class="vc-btn cam-on" id="btnCam" title="Camera"><i class="fas fa-video"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Column 2 — Conversation Chat ═══ -->
+    <div class="col-chat">
+        <div class="chat-panel">
+            <div class="chat-header">
+                <i class="fas fa-comments"></i> Interview Conversation
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- messages injected dynamically -->
+            </div>
+            <div class="typing-indicator" id="typingIndicator">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Column 3 — Controls / Q&A ═══ -->
+    <div class="col-control">
+        <!-- Progress -->
+        <div class="ctrl-card">
+            <h6><i class="fas fa-tasks mr-1" style="color:#667eea;"></i> Progress</h6>
+            <div class="prog-label">
+                <span>Questions</span>
+                <span id="progText">{{ answered_count }}/{{ total_questions }}</span>
+            </div>
+            <div class="progress-mini">
+                <div class="bar" id="progBar" style="width:{% widthratio answered_count total_questions 100 %}%"></div>
+            </div>
+        </div>
+
+        <!-- Current Question -->
+        <div class="ctrl-card" id="questionCard">
+            {% if current_question %}
+            <div>
+                <span class="q-counter" id="qCounter">Q{{ current_question.order }}/{{ total_questions }}</span>
+                <span class="q-category" id="qCategory">{{ current_question.category }}</span>
+            </div>
+            <p class="q-text" id="qText">{{ current_question.question_text }}</p>
+            {% else %}
+            <div class="text-center py-3">
+                <i class="fas fa-check-circle text-success" style="font-size:2rem;"></i>
+                <p class="mt-2 mb-0">All questions answered!</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Speak / Answer -->
+        <div class="ctrl-card" id="answerCard">
+            {% if current_question %}
+            <h6><i class="fas fa-microphone-alt mr-1" style="color:#e53935;"></i> Your Answer</h6>
+            <div class="speak-area">
+                <button class="big-mic-btn" id="bigMic" title="Click to start/stop speaking">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <div class="mic-label" id="micLabel">Click to start speaking</div>
+                <div class="vol-bars" id="volBars">
+                    <div class="vol-bar" style="height:4px;"></div>
+                    <div class="vol-bar" style="height:4px;"></div>
+                    <div class="vol-bar" style="height:4px;"></div>
+                    <div class="vol-bar" style="height:4px;"></div>
+                    <div class="vol-bar" style="height:4px;"></div>
+                </div>
+            </div>
+            <textarea class="transcript-preview" id="transcript"
+                      placeholder="Your spoken words appear here... (or type manually)"></textarea>
+            <div class="action-row">
+                <button class="btn-submit-a" id="btnSubmit" data-question-id="{{ current_question.id }}">
+                    <i class="fas fa-paper-plane mr-1"></i> Submit
+                </button>
+                <button class="btn-skip-a" id="btnSkip" data-question-id="{{ current_question.id }}">
+                    Skip
+                </button>
+            </div>
+            {% else %}
+            <form method="POST" action="{% url 'ai-interview-complete' pk=interview.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-submit-a" style="width:100%;">
+                    <i class="fas fa-flag-checkered mr-1"></i> Complete Interview
+                </button>
+            </form>
+            {% endif %}
+        </div>
+
+        <!-- Live Feedback -->
+        <div class="ctrl-card live-fb" id="liveFb">
+            <h6><i class="fas fa-chart-line mr-1" style="color:#667eea;"></i> Last Score</h6>
+            <div id="fbScores"></div>
+            <p id="fbText" class="mb-0 mt-1" style="color:#555;"></p>
+        </div>
+    </div>
+
+</div>
+</section>
+
+<!-- Hidden data -->
+<input type="hidden" id="interviewId"    value="{{ interview.pk }}">
+<input type="hidden" id="submitUrl"      value="{% url 'ai-interview-submit-answer' pk=interview.pk %}">
+<input type="hidden" id="completeUrl"    value="{% url 'ai-interview-complete' pk=interview.pk %}">
+<input type="hidden" id="csrfToken"      value="{{ csrf_token }}">
+<input type="hidden" id="totalQuestions" value="{{ total_questions }}">
+<input type="hidden" id="candidateName"  value="{{ interview.candidate_name }}">
+{% if current_question %}
+<input type="hidden" id="firstQuestionText" value="{{ current_question.question_text }}">
+{% endif %}
+{% endblock %}
+
+{% block script %}
+(function(){
+    // ════════════════ DOM References ════════════════
+    var video         = document.getElementById('localVideo');
+    var btnMic        = document.getElementById('btnMic');
+    var btnCam        = document.getElementById('btnCam');
+    var bigMic        = document.getElementById('bigMic');
+    var micLabel      = document.getElementById('micLabel');
+    var transcript    = document.getElementById('transcript');
+    var btnSubmit     = document.getElementById('btnSubmit');
+    var btnSkip       = document.getElementById('btnSkip');
+    var botAvatar     = document.getElementById('botAvatar');
+    var botStatus     = document.getElementById('botStatus');
+    var chatMessages  = document.getElementById('chatMessages');
+    var typingInd     = document.getElementById('typingIndicator');
+    var recBadge      = document.getElementById('recBadge');
+    var timerBadge    = document.getElementById('timerBadge');
+    var submitUrl     = document.getElementById('submitUrl').value;
+    var csrfToken     = document.getElementById('csrfToken').value;
+    var totalQ        = parseInt(document.getElementById('totalQuestions').value);
+    var candidateName = document.getElementById('candidateName').value;
+    var firstQEl      = document.getElementById('firstQuestionText');
+    var firstQText    = firstQEl ? firstQEl.value : '';
+
+    var stream = null, isMicOn = true, isCamOn = true;
+    var seconds = 0, timerInt = null;
+    var recognition = null, isListening = false;
+    var mediaRecorder = null, audioChunks = [];
+
+    // ── Mouth animation for female avatar ──
+    var mouthAnim = null;
+    function startMouthAnim(){
+        var mouth  = document.getElementById('mouthOpen');
+        var teeth  = document.getElementById('teethEl');
+        if(!mouth) return;
+        var open = false;
+        mouthAnim = setInterval(function(){
+            open = !open;
+            mouth.setAttribute('ry', open ? '7' : '2');
+            if(teeth) teeth.setAttribute('opacity', open ? '0.85' : '0');
+        }, 220);
+    }
+    function stopMouthAnim(){
+        if(mouthAnim){ clearInterval(mouthAnim); mouthAnim = null; }
+        var mouth = document.getElementById('mouthOpen');
+        var teeth = document.getElementById('teethEl');
+        if(mouth) mouth.setAttribute('ry','2');
+        if(teeth) teeth.setAttribute('opacity','0');
+    }
+
+    // ════════════════ Camera ════════════════
+    function startCamera(){
+        navigator.mediaDevices.getUserMedia({video:true, audio:true})
+        .then(function(s){
+            stream = s;
+            video.srcObject = stream;
+        })
+        .catch(function(e){
+            console.warn('Camera denied:', e);
+        });
+    }
+    startCamera();
+
+    // Timer
+    timerInt = setInterval(function(){
+        seconds++;
+        var m = String(Math.floor(seconds/60)).padStart(2,'0');
+        var s = String(seconds%60).padStart(2,'0');
+        timerBadge.textContent = m+':'+s;
+    }, 1000);
+
+    // Mic toggle (camera stream)
+    if(btnMic) btnMic.onclick = function(){
+        isMicOn = !isMicOn;
+        if(stream) stream.getAudioTracks().forEach(function(t){ t.enabled = isMicOn; });
+        btnMic.className = 'vc-btn ' + (isMicOn ? 'mic-on' : 'mic-off');
+        btnMic.innerHTML = isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
+    };
+    // Cam toggle
+    if(btnCam) btnCam.onclick = function(){
+        isCamOn = !isCamOn;
+        if(stream) stream.getVideoTracks().forEach(function(t){ t.enabled = isCamOn; });
+        btnCam.className = 'vc-btn ' + (isCamOn ? 'cam-on' : 'cam-off');
+        btnCam.innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
+    };
+
+    // ════════════════ Text-to-Speech (Bot speaks) ════════════════
+    var synth = window.speechSynthesis;
+    var voicesLoaded = false;
+
+    function loadVoices(){
+        if(synth){
+            synth.getVoices();
+            voicesLoaded = true;
+        }
+    }
+    loadVoices();
+    if(synth && synth.onvoiceschanged !== undefined){
+        synth.onvoiceschanged = loadVoices;
+    }
+
+    function botSpeak(text, callback){
+        botAvatar.classList.add('speaking');
+        botStatus.textContent = 'Speaking...';
+        startMouthAnim();
+        addChat('bot', text);
+
+        if(!synth){
+            stopMouthAnim();
+            botAvatar.classList.remove('speaking');
+            botStatus.textContent = 'Ready';
+            if(callback) callback();
+            return;
+        }
+        synth.cancel();
+
+        var utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.92;
+        utter.pitch = 1.25;   /* higher pitch → female voice */
+        utter.lang = 'en-US';
+
+        var voices = synth.getVoices();
+        var pref = null;
+        /* 1st preference: Google female / Zira / Samantha / female-named voices */
+        var femaleNames = ['Zira','Samantha','Victoria','Karen','Moira','Fiona','Google US English',
+                           'Google UK English Female','Microsoft Zira','Allison','Ava','Susan'];
+        for(var f=0; f<femaleNames.length; f++){
+            for(var i=0; i<voices.length; i++){
+                if(voices[i].name.indexOf(femaleNames[f]) !== -1 && voices[i].lang.indexOf('en') === 0){
+                    pref = voices[i]; break;
+                }
+            }
+            if(pref) break;
+        }
+        /* Fallback: any English voice */
+        if(!pref){
+            for(var j=0; j<voices.length; j++){
+                if(voices[j].lang.indexOf('en') === 0){ pref = voices[j]; break; }
+            }
+        }
+        if(pref) utter.voice = pref;
+
+        utter.onend = function(){
+            stopMouthAnim();
+            botAvatar.classList.remove('speaking');
+            botStatus.textContent = 'Listening to your answer...';
+            if(callback) callback();
+        };
+        utter.onerror = function(){
+            stopMouthAnim();
+            botAvatar.classList.remove('speaking');
+            botStatus.textContent = 'Ready';
+            if(callback) callback();
+        };
+        synth.speak(utter);
+    }
+
+    // ════════════════ Speech Recognition (Candidate speaks) ════════════════
+    var SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var finalTranscript = '';
+
+    function initRecognition(){
+        if(!SpeechRecognitionAPI){
+            if(micLabel) micLabel.textContent = 'Speech recognition not supported — type instead';
+            if(bigMic) bigMic.classList.add('disabled-mic');
+            return;
+        }
+        recognition = new SpeechRecognitionAPI();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = function(e){
+            var interim = '';
+            for(var i = e.resultIndex; i < e.results.length; i++){
+                if(e.results[i].isFinal){
+                    finalTranscript += e.results[i][0].transcript + ' ';
+                } else {
+                    interim += e.results[i][0].transcript;
+                }
+            }
+            if(transcript) transcript.value = finalTranscript + interim;
+            animateVolBars();
+        };
+        recognition.onend = function(){
+            if(isListening){
+                try{ recognition.start(); }catch(ex){}
+            }
+        };
+        recognition.onerror = function(e){
+            if(e.error === 'not-allowed'){
+                if(micLabel) micLabel.textContent = 'Mic permission denied';
+            }
+        };
+    }
+    initRecognition();
+
+    function startListening(){
+        if(!recognition) return;
+        isListening = true;
+        finalTranscript = '';
+        if(transcript) transcript.value = '';
+        try{ recognition.start(); }catch(ex){}
+        if(bigMic) bigMic.classList.add('listening');
+        if(micLabel) micLabel.textContent = 'Listening... speak now';
+        if(recBadge) recBadge.style.display = 'flex';
+        startAudioRecord();
+    }
+
+    function stopListening(){
+        isListening = false;
+        if(recognition) try{ recognition.stop(); }catch(ex){}
+        if(bigMic) bigMic.classList.remove('listening');
+        if(micLabel) micLabel.textContent = 'Click to start speaking';
+        if(recBadge) recBadge.style.display = 'none';
+        stopAudioRecord();
+        resetVolBars();
+    }
+
+    // Big mic button
+    if(bigMic && !bigMic.classList.contains('disabled-mic')){
+        bigMic.onclick = function(){
+            if(!isListening) startListening();
+            else stopListening();
+        };
+    }
+
+    // Audio recording for server-side Whisper fallback
+    function startAudioRecord(){
+        if(!stream) return;
+        audioChunks = [];
+        try{
+            mediaRecorder = new MediaRecorder(stream, {mimeType:'audio/webm'});
+            mediaRecorder.ondataavailable = function(e){ if(e.data.size > 0) audioChunks.push(e.data); };
+            mediaRecorder.start();
+        }catch(ex){ console.warn('MediaRecorder error', ex); }
+    }
+    function stopAudioRecord(){
+        if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+            try{ mediaRecorder.stop(); }catch(ex){}
+        }
+    }
+
+    // Volume bars animation
+    function animateVolBars(){
+        var bars = document.querySelectorAll('#volBars .vol-bar');
+        for(var i=0; i<bars.length; i++){
+            bars[i].style.height = (Math.random()*18 + 4) + 'px';
+        }
+    }
+    function resetVolBars(){
+        var bars = document.querySelectorAll('#volBars .vol-bar');
+        for(var i=0; i<bars.length; i++) bars[i].style.height = '4px';
+    }
+
+    // ════════════════ Chat Messages ════════════════
+    function addChat(who, text, meta){
+        var isBot = (who === 'bot');
+        var div = document.createElement('div');
+        div.className = 'chat-msg ' + (isBot ? 'bot' : 'user');
+        var now = new Date();
+        var time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        div.innerHTML =
+            '<div class="msg-avatar ' + (isBot ? 'bot-av' : 'user-av') + '">' +
+                '<i class="fas ' + (isBot ? 'fa-user-circle' : 'fa-user') + '"></i>' +
+            '</div>' +
+            '<div>' +
+                '<div class="msg-bubble">' + escHtml(text) + '</div>' +
+                '<div class="msg-meta">' + (isBot ? 'Sarah (AI Interviewer)' : candidateName) + ' &middot; ' + time + (meta ? ' &middot; ' + meta : '') + '</div>' +
+            '</div>';
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function showTyping(show){
+        typingInd.classList.toggle('show', show);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function escHtml(t){
+        var d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
+    }
+
+    // ════════════════ Submit Answer ════════════════
+    if(btnSubmit) btnSubmit.onclick = function(){ doSubmit(false); };
+    if(btnSkip)   btnSkip.onclick  = function(){ doSubmit(true); };
+
+    function doSubmit(skip){
+        var qId = btnSubmit ? btnSubmit.getAttribute('data-question-id') : null;
+        if(!qId) return;
+        if(isListening) stopListening();
+
+        var answer = skip ? '(Skipped)' : (transcript ? transcript.value.trim() : '');
+        if(!skip && !answer){
+            alert('Please speak or type your answer first.');
+            return;
+        }
+
+        // Add candidate message to chat
+        addChat('user', skip ? '(Skipped this question)' : answer);
+
+        // Disable controls
+        if(btnSubmit){ btnSubmit.disabled = true; btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Evaluating...'; }
+        if(btnSkip) btnSkip.disabled = true;
+        if(bigMic) bigMic.classList.add('disabled-mic');
+        botStatus.textContent = 'Evaluating your answer...';
+        showTyping(true);
+
+        var formData = new FormData();
+        formData.append('question_id', qId);
+        formData.append('answer_text', answer);
+        if(audioChunks.length > 0){
+            formData.append('audio', new Blob(audioChunks, {type:'audio/webm'}), 'answer.webm');
+        }
+
+        fetch(submitUrl, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken},
+            body: formData
+        })
+        .then(function(resp){ return resp.json(); })
+        .then(function(data){
+            showTyping(false);
+            if(data.success){
+                var ev = data.evaluation;
+                var fbMsg = 'Score — Technical: ' + ev.technical_score + '/10, Communication: ' + ev.communication_score + '/10, Confidence: ' + ev.confidence_score + '/10.\n' + ev.feedback;
+                addChat('bot', fbMsg);
+                showLiveFeedback(ev);
+                updateProgress(data.answered_count, data.total_questions);
+
+                if(data.is_complete){
+                    setTimeout(function(){
+                        botSpeak("Great job! You have answered all questions. Let me generate your report.", function(){
+                            showCompleteUI();
+                        });
+                    }, 1200);
+                } else if(data.next_question){
+                    setTimeout(function(){
+                        loadNextQuestion(data.next_question, data.answered_count, data.total_questions);
+                    }, 1500);
+                }
+            } else {
+                alert(data.error || 'Error submitting answer');
+                resetControls();
+            }
+        })
+        .catch(function(err){
+            showTyping(false);
+            console.error(err);
+            alert('Network error. Try again.');
+            resetControls();
+        });
+    }
+
+    function resetControls(){
+        if(btnSubmit){ btnSubmit.disabled = false; btnSubmit.innerHTML = '<i class="fas fa-paper-plane mr-1"></i> Submit'; }
+        if(btnSkip) btnSkip.disabled = false;
+        if(bigMic) bigMic.classList.remove('disabled-mic');
+    }
+
+    function showLiveFeedback(ev){
+        var fb = document.getElementById('liveFb');
+        var sc = document.getElementById('fbScores');
+        var tx = document.getElementById('fbText');
+        function pc(s){ return s >= 7 ? 'good' : (s >= 4 ? 'medium' : 'low'); }
+        sc.innerHTML =
+            '<span class="score-pill ' + pc(ev.technical_score) + '">Tech: ' + ev.technical_score + '/10</span>' +
+            '<span class="score-pill ' + pc(ev.communication_score) + '">Comm: ' + ev.communication_score + '/10</span>' +
+            '<span class="score-pill ' + pc(ev.confidence_score) + '">Conf: ' + ev.confidence_score + '/10</span>';
+        tx.textContent = ev.feedback || '';
+        fb.classList.add('show');
+    }
+
+    function updateProgress(answered, total){
+        var pct = Math.round((answered / total) * 100);
+        document.getElementById('progBar').style.width = pct + '%';
+        document.getElementById('progText').textContent = answered + '/' + total;
+    }
+
+    function loadNextQuestion(q, answered, total){
+        document.getElementById('qCounter').textContent = 'Q' + q.order + '/' + total;
+        document.getElementById('qCategory').textContent = q.category || '';
+        document.getElementById('qText').textContent = q.text;
+
+        if(transcript) transcript.value = '';
+        finalTranscript = '';
+        if(btnSubmit) btnSubmit.setAttribute('data-question-id', q.id);
+        if(btnSkip)   btnSkip.setAttribute('data-question-id', q.id);
+        audioChunks = [];
+        resetControls();
+
+        // Bot speaks the next question, then auto-listen
+        botSpeak(q.text, function(){
+            setTimeout(function(){ startListening(); }, 500);
+        });
+    }
+
+    function showCompleteUI(){
+        var qc = document.getElementById('questionCard');
+        var ac = document.getElementById('answerCard');
+        var cu = document.getElementById('completeUrl').value;
+        qc.innerHTML = '<div class="text-center py-3"><i class="fas fa-check-circle text-success" style="font-size:2rem;"></i><p class="mt-2 mb-0 font-weight-bold">All Questions Answered!</p></div>';
+        ac.innerHTML =
+            '<form method="POST" action="' + cu + '">' +
+                '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrfToken + '">' +
+                '<button type="submit" class="btn-submit-a" style="width:100%;">' +
+                    '<i class="fas fa-flag-checkered mr-1"></i> Complete &amp; Generate Report' +
+                '</button>' +
+            '</form>';
+        clearInterval(timerInt);
+        botStatus.textContent = 'Interview complete';
+    }
+
+    // ════════════════ Init: Bot greets & reads first question ════════════════
+    addChat('bot', 'Hello ' + candidateName + '! I am Sarah, your AI Interviewer. Welcome! Let\'s begin.');
+
+    if(firstQText){
+        setTimeout(function(){
+            botSpeak('Hello ' + candidateName + '! I am Sarah, your AI Interviewer. Welcome to your interview. Let us begin with the first question.', function(){
+                setTimeout(function(){
+                    botSpeak(firstQText, function(){
+                        setTimeout(function(){ startListening(); }, 600);
+                    });
+                }, 400);
+            });
+        }, 800);
+    }
+
+})();
+{% endblock %}

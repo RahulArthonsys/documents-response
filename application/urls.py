@@ -28,6 +28,8 @@ urlpatterns = [
     path('', include('apps.user.urls')),
     # ai chatbot urls
     path('', include('ai_chatbot.urls')),
+    # ai interview urls
+    path('', include('ai_interview.urls')),
 
 ]
 if settings.DEBUG:

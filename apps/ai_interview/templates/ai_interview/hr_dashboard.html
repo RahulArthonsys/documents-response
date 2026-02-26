@@ -1,0 +1,355 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block static %}
+<style>
+    .dashboard-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+    .dash-stat-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: transform 0.2s;
+    }
+    .dash-stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .dash-stat-icon {
+        width: 55px;
+        height: 55px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        color: #fff;
+    }
+    .dash-stat-icon.total { background: linear-gradient(135deg, #667eea, #764ba2); }
+    .dash-stat-icon.completed { background: linear-gradient(135deg, #43a047, #66bb6a); }
+    .dash-stat-icon.avg { background: linear-gradient(135deg, #ff9800, #ffb74d); }
+    .dash-stat-icon.new { background: linear-gradient(135deg, #2196f3, #64b5f6); }
+    .dash-stat-info h4 {
+        margin: 0;
+        font-weight: 700;
+        color: #333;
+        font-size: 1.5rem;
+    }
+    .dash-stat-info span {
+        color: #888;
+        font-size: 0.85rem;
+    }
+
+    .dashboard-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .dashboard-toolbar .search-box {
+        position: relative;
+    }
+    .dashboard-toolbar .search-box input {
+        padding: 8px 15px 8px 35px;
+        border-radius: 8px;
+        border: 1.5px solid #e0e0e0;
+        width: 250px;
+        transition: border-color 0.2s;
+    }
+    .dashboard-toolbar .search-box input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+        outline: none;
+    }
+    .dashboard-toolbar .search-box i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #aaa;
+    }
+    .filter-select {
+        padding: 8px 15px;
+        border-radius: 8px;
+        border: 1.5px solid #e0e0e0;
+        cursor: pointer;
+    }
+
+    .interview-table {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        overflow: hidden;
+    }
+    .interview-table table {
+        margin-bottom: 0;
+    }
+    .interview-table th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+        padding: 12px 15px;
+        font-weight: 600;
+        color: #555;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+    }
+    .interview-table td {
+        padding: 12px 15px;
+        vertical-align: middle;
+    }
+    .status-badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .status-badge.pending { background: #fff3e0; color: #e65100; }
+    .status-badge.resume_uploaded { background: #e3f2fd; color: #1565c0; }
+    .status-badge.questions_generated { background: #f3e5f5; color: #7b1fa2; }
+    .status-badge.in_progress { background: #e8f5e9; color: #2e7d32; }
+    .status-badge.completed { background: #e0f2f1; color: #00695c; }
+    .status-badge.evaluated { background: #e8f5e9; color: #1b5e20; }
+    .status-badge.cancelled { background: #fce4ec; color: #c62828; }
+
+    .score-display {
+        font-weight: 700;
+        font-size: 1rem;
+    }
+    .score-display.good { color: #2e7d32; }
+    .score-display.medium { color: #e65100; }
+    .score-display.low { color: #c62828; }
+
+    .action-btn {
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+    .action-btn:hover { opacity: 0.8; }
+
+    .btn-new-interview {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .btn-new-interview:hover {
+        transform: translateY(-1px);
+        color: #fff;
+    }
+
+    .pagination-wrapper {
+        padding: 15px;
+        display: flex;
+        justify-content: center;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        color: #ddd;
+        margin-bottom: 15px;
+    }
+    .empty-state h5 {
+        color: #888;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<section class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1><i class="fas fa-tachometer-alt mr-2"></i>HR Interview Dashboard</h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item active">Dashboard</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="content">
+    <!-- Stats -->
+    <div class="dashboard-stats">
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon total"><i class="fas fa-users"></i></div>
+            <div class="dash-stat-info">
+                <h4>{{ total_interviews }}</h4>
+                <span>Total Interviews</span>
+            </div>
+        </div>
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon completed"><i class="fas fa-check-circle"></i></div>
+            <div class="dash-stat-info">
+                <h4>{{ completed_count }}</h4>
+                <span>Completed</span>
+            </div>
+        </div>
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon avg"><i class="fas fa-star"></i></div>
+            <div class="dash-stat-info">
+                <h4>{{ avg_score }}/10</h4>
+                <span>Avg Score</span>
+            </div>
+        </div>
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon new"><i class="fas fa-plus-circle"></i></div>
+            <div class="dash-stat-info">
+                <a href="{% url 'ai-interview-start' %}" style="color:inherit;text-decoration:none;">
+                    <h4><i class="fas fa-plus"></i></h4>
+                    <span>New Interview</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="dashboard-toolbar">
+        <div class="d-flex gap-2 align-items-center" style="gap:10px;">
+            <form method="GET" class="d-flex" style="gap:10px;">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search candidate...">
+                </div>
+                <select name="status" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Status</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if code == status_filter %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <a href="{% url 'ai-interview-start' %}" class="btn-new-interview">
+            <i class="fas fa-plus mr-1"></i> New Interview
+        </a>
+    </div>
+
+    <!-- Table -->
+    <div class="interview-table">
+        {% if interviews %}
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Candidate</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Questions</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for iv in interviews %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td><strong>{{ iv.candidate_name }}</strong></td>
+                    <td>{{ iv.candidate_email }}</td>
+                    <td>
+                        <span class="status-badge {{ iv.status }}">{{ iv.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if iv.overall_score %}
+                        <span class="score-display {% if iv.overall_score >= 7 %}good{% elif iv.overall_score >= 4 %}medium{% else %}low{% endif %}">
+                            {{ iv.overall_score }}/10
+                        </span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ iv.answered_questions }}/{{ iv.total_questions }}</td>
+                    <td>{{ iv.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        {% if iv.status == 'questions_generated' or iv.status == 'in_progress' %}
+                        <a href="{% url 'ai-interview-room' pk=iv.pk %}" class="action-btn btn btn-sm btn-info" title="Continue Interview">
+                            <i class="fas fa-video"></i>
+                        </a>
+                        {% endif %}
+
+                        {% if iv.status in 'completed,evaluated' %}
+                        <a href="{% url 'ai-interview-result' pk=iv.pk %}" class="action-btn btn btn-sm btn-success" title="View Results">
+                            <i class="fas fa-poll"></i>
+                        </a>
+                        {% endif %}
+
+                        <form method="POST" action="{% url 'ai-interview-delete' pk=iv.pk %}" style="display:inline;"
+                              onsubmit="return confirm('Delete interview for {{ iv.candidate_name }}?')">
+                            {% csrf_token %}
+                            <button type="submit" class="action-btn btn btn-sm btn-danger" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="pagination-wrapper">
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}&status={{ status_filter }}&q={{ search_query }}">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% for num in page_obj.paginator.page_range %}
+                    <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                        <a class="page-link" href="?page={{ num }}&status={{ status_filter }}&q={{ search_query }}">{{ num }}</a>
+                    </li>
+                    {% endfor %}
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}&status={{ status_filter }}&q={{ search_query }}">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <h5>No interviews found</h5>
+            <p class="text-muted">Start by creating a new interview.</p>
+            <a href="{% url 'ai-interview-start' %}" class="btn-new-interview mt-3">
+                <i class="fas fa-plus mr-1"></i> New Interview
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+
+{% block script %}
+{% endblock %}

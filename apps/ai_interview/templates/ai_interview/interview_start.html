@@ -1,0 +1,222 @@
+{% extends "administrator/base.html" %}
+{% load static %}
+
+{% block static %}
+<style>
+    .interview-start-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+    .interview-hero {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px;
+        padding: 40px;
+        color: #fff;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    .interview-hero h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .interview-hero p {
+        opacity: 0.9;
+        font-size: 1.1rem;
+    }
+    .interview-hero i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.9;
+    }
+    .upload-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+        padding: 30px;
+    }
+    .upload-card .form-group label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 6px;
+    }
+    .upload-card .form-control {
+        border-radius: 8px;
+        padding: 10px 15px;
+        border: 1.5px solid #e0e0e0;
+        transition: border-color 0.2s;
+    }
+    .upload-card .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+    }
+    .file-upload-area {
+        border: 2px dashed #667eea;
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.2s;
+        position: relative;
+    }
+    .file-upload-area:hover {
+        background: #f5f7ff;
+    }
+    .file-upload-area i {
+        font-size: 2.5rem;
+        color: #667eea;
+    }
+    .file-upload-area .file-name {
+        margin-top: 8px;
+        font-size: 0.95rem;
+        color: #555;
+    }
+    .btn-start-interview {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: #fff;
+        padding: 12px 40px;
+        border-radius: 8px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        width: 100%;
+    }
+    .btn-start-interview:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(102,126,234,0.4);
+        color: #fff;
+    }
+    .steps-info {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+    }
+    .step-badge {
+        background: #f5f7ff;
+        border: 1px solid #e0e5ff;
+        border-radius: 10px;
+        padding: 15px;
+        flex: 1;
+        min-width: 140px;
+        text-align: center;
+    }
+    .step-badge i {
+        font-size: 1.5rem;
+        color: #667eea;
+        display: block;
+        margin-bottom: 6px;
+    }
+    .step-badge span {
+        font-size: 0.85rem;
+        color: #555;
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<section class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1><i class="fas fa-video mr-2"></i>AI Live Video Interview</h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item"><a href="{% url 'ai-interview-dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">New Interview</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="content">
+    <div class="interview-start-container">
+        <!-- Hero -->
+        <div class="interview-hero">
+            <i class="fas fa-robot"></i>
+            <h2>AI-Powered Interview</h2>
+            <p>Upload a resume, and our AI will generate tailored questions for a live video interview.</p>
+        </div>
+
+        <!-- Steps -->
+        <div class="steps-info">
+            <div class="step-badge">
+                <i class="fas fa-file-upload"></i>
+                <span>Upload Resume</span>
+            </div>
+            <div class="step-badge">
+                <i class="fas fa-brain"></i>
+                <span>AI Generates Questions</span>
+            </div>
+            <div class="step-badge">
+                <i class="fas fa-video"></i>
+                <span>Live Interview</span>
+            </div>
+            <div class="step-badge">
+                <i class="fas fa-chart-bar"></i>
+                <span>Get AI Score & Report</span>
+            </div>
+        </div>
+
+        <!-- Upload Form -->
+        <div class="upload-card">
+            <form method="POST" enctype="multipart/form-data" id="interviewForm">
+                {% csrf_token %}
+
+                {% if messages %}
+                <div class="mb-3">
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label><i class="fas fa-user mr-1"></i> Candidate Name</label>
+                    <input type="text" name="candidate_name" class="form-control" placeholder="Enter full name" required>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-envelope mr-1"></i> Candidate Email</label>
+                    <input type="email" name="candidate_email" class="form-control" placeholder="Enter email address" required>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-file-pdf mr-1"></i> Resume (PDF only)</label>
+                    <div class="file-upload-area" onclick="document.getElementById('resumeInput').click()">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p class="mb-0 mt-2">Click to upload or drag & drop</p>
+                        <p class="file-name text-muted" id="fileName">No file selected</p>
+                        <input type="file" name="resume" id="resumeInput" accept=".pdf" style="display:none" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-start-interview mt-3" id="btnStart">
+                    <i class="fas fa-rocket mr-2"></i> Start AI Interview
+                </button>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block script %}
+document.getElementById('resumeInput').addEventListener('change', function(e) {
+    var name = e.target.files[0] ? e.target.files[0].name : 'No file selected';
+    document.getElementById('fileName').textContent = name;
+});
+
+document.getElementById('interviewForm').addEventListener('submit', function() {
+    var btn = document.getElementById('btnStart');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Analyzing Resume & Generating Questions...';
+});
+{% endblock %}

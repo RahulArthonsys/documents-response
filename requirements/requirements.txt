@@ -24,3 +24,12 @@ Werkzeug
 pretty-html-table
 tqdm
 openai
+
+# AI Interview dependencies
+PyPDF2
+sentence-transformers
+faiss-cpu
+openai-whisper
+reportlab
+langchain-openai
+langchain

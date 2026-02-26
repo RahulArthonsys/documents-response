@@ -63,6 +63,7 @@ DEFAULT_APPS = [
     'ajax_datatable',
     'django_ckeditor_5',
     'ai_chatbot',
+    'ai_interview',
     #keep below app in last only
     'django_cleanup',
 ]
@@ -226,6 +227,9 @@ EMAIL_USE_TLS = True
 
 APPEND_SLASH = False
 
-# ##### AI / OPENAI CONFIGURATION #########################
+# ##### AI / OPENROUTER CONFIGURATION #########################
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENROUTER_API_KEY = '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'
+OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+OPENROUTER_MODEL = 'mistralai/mistral-small-3.1-24b-instruct:free'
 

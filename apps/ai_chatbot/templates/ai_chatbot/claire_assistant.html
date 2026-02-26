@@ -5,19 +5,152 @@
 <!-- Markdown rendering -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
 <style>
-  .chat-wrapper {
+  /* ── Hide footer, prevent page scroll ── */
+  .main-footer { display: none !important; }
+  body, html { overflow: hidden !important; }
+
+  /* ── claire-page: fixed overlay covering content area ──
+     AdminLTE navbar  = 3.5rem + 1px ≈ 57px (top offset)
+     AdminLTE sidebar  = 250px wide (left offset), collapses to 4.6rem
+  */
+  .claire-page {
+    position: fixed;
+    top: calc(3.5rem + 1px); /* below top navbar */
+    bottom: 0;
+    right: 0;
+    left: 250px;             /* default sidebar width */
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 220px);
-    min-height: 500px;
+    background: #ecf0f4;
+    z-index: 10;
+    transition: left 0.3s ease-in-out; /* match sidebar animation */
+  }
+  /* sidebar collapsed state */
+  body.sidebar-mini.sidebar-collapse .claire-page { left: 4.6rem; }
+
+  /* ── Content header — compact breadcrumb bar ── */
+  .claire-page .content-header {
+    flex-shrink: 0;
+    padding: 6px 15px;
+    margin-bottom: 0;
+    background: #ecf0f4;
+  }
+  .claire-page .content-header h1 { font-size: 1.25rem; margin: 0; }
+  .claire-page .content-header .breadcrumb { margin-bottom: 0; }
+
+  /* ── Section.content — fills rest of the space ── */
+  .claire-page section.content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0 12px 8px;
+  }
+  .claire-page section.content > .container-fluid {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+  }
+  .claire-page section.content > .container-fluid > .row {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+    margin: 0 -6px;
+  }
+  .claire-page section.content > .container-fluid > .row > [class*="col-"] {
+    padding: 0 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Sidebar column ── */
+  .sidebar-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-col > .card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .sidebar-col > .card > .card-header { flex-shrink: 0; }
+  .sidebar-col > .card > .card-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 8px;
+  }
+  .sidebar-col > .card > .card-footer { flex-shrink: 0; }
+
+  /* Conversation items */
+  .conversation-item { transition: background 0.15s; border-radius: 6px; }
+  .conversation-item:hover { background: #e9ecef; }
+  .conversation-item.active-conv { background: #007bff !important; color: #fff !important; }
+  .conversation-item.active-conv .text-muted,
+  .conversation-item.active-conv .font-weight-medium { color: #fff !important; }
+  .conversation-item.active-conv .btn-outline-danger {
+    color: #fff !important; border-color: rgba(255,255,255,0.5) !important;
+  }
+
+  /* ── Chat column ── */
+  .chat-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chat-col > .card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .chat-col > .card > .card-header { flex-shrink: 0; }
+  .chat-col > .card > .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0;
+  }
+
+  /* ── Chat wrapper ── */
+  .chat-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 12px 8px;
   }
   .chat-messages {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 16px;
     background: #f8f9fa;
-    border-radius: 4px;
+    border-radius: 6px;
   }
+  .chat-input-bar { flex-shrink: 0; padding: 10px 0 4px; }
+  .file-upload-area { flex-shrink: 0; }
+  .file-progress { flex-shrink: 0; display: none; margin-top: 4px; }
+
+  /* ── Bubbles: user RIGHT, assistant LEFT ── */
   .chat-bubble {
     max-width: 75%;
     margin-bottom: 14px;
@@ -25,8 +158,10 @@
     align-items: flex-start;
     gap: 8px;
   }
-  .chat-bubble.user { flex-direction: row-reverse; margin-left: auto; }
+  .chat-bubble.user   { flex-direction: row-reverse; margin-left: auto; margin-right: 0; }
+  .chat-bubble.assistant { flex-direction: row; margin-right: auto; margin-left: 0; }
   .chat-bubble.system { max-width: 100%; justify-content: center; }
+
   .chat-bubble .bubble-content {
     padding: 10px 14px;
     border-radius: 18px;
@@ -38,8 +173,7 @@
   .chat-bubble .bubble-content p:last-child { margin-bottom: 0; }
   .chat-bubble .bubble-content pre {
     background: #1e1e1e; color: #d4d4d4;
-    padding: 10px; border-radius: 6px;
-    overflow-x: auto; font-size: 0.85rem;
+    padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem;
   }
   .chat-bubble .bubble-content code {
     background: #e9ecef; padding: 1px 4px; border-radius: 3px; font-size: 0.88em;
@@ -53,10 +187,18 @@
     border: 1px solid #dee2e6; padding: 6px 8px; font-size: 0.85rem;
   }
   .chat-bubble .bubble-content table th { background: #f0f0f0; }
-  .chat-bubble.user .bubble-content { background: #007bff; color: #fff; border-bottom-right-radius: 4px; }
+
+  .chat-bubble.user .bubble-content {
+    background: #007bff; color: #fff; border-bottom-right-radius: 4px;
+  }
   .chat-bubble.user .bubble-content code { background: rgba(255,255,255,0.2); color: #fff; }
-  .chat-bubble.assistant .bubble-content { background: #fff; color: #333; border: 1px solid #dee2e6; border-bottom-left-radius: 4px; }
-  .chat-bubble.system .bubble-content { background: #e8f5e9; color: #2e7d32; font-size: 0.82rem; border-radius: 8px; }
+  .chat-bubble.assistant .bubble-content {
+    background: #fff; color: #333; border: 1px solid #dee2e6; border-bottom-left-radius: 4px;
+  }
+  .chat-bubble.system .bubble-content {
+    background: #e8f5e9; color: #2e7d32; font-size: 0.82rem; border-radius: 8px;
+  }
+
   .chat-bubble .avatar {
     width: 32px; height: 32px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -64,18 +206,14 @@
   }
   .chat-bubble.user .avatar { background: #007bff; color: #fff; }
   .chat-bubble.assistant .avatar { background: #17a2b8; color: #fff; }
-  .chat-input-bar { padding: 12px 0 0; }
+
   .file-upload-area {
     display: flex; align-items: center; gap: 6px; padding: 4px 0;
   }
   .file-upload-area .file-info {
-    font-size: 0.82rem; color: #666;
-    display: flex; align-items: center; gap: 4px;
+    font-size: 0.82rem; color: #666; display: flex; align-items: center; gap: 4px;
   }
-  .file-upload-area .file-info .remove-file {
-    color: #dc3545; cursor: pointer; font-size: 0.9rem;
-  }
-  .file-progress { display: none; margin-top: 4px; }
+  .file-upload-area .file-info .remove-file { color: #dc3545; cursor: pointer; }
   .typing-indicator span {
     display: inline-block; width: 7px; height: 7px; border-radius: 50%;
     background: #aaa; margin: 0 2px; animation: bounce 1.2s infinite;
@@ -83,28 +221,11 @@
   .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
   .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
-  .session-docs-list { font-size: 0.82rem; }
-  .session-docs-list .badge { font-size: 0.72rem; }
-  .session-doc-item {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 4px 6px; margin-bottom: 2px; border-radius: 4px;
-    transition: background 0.15s;
-  }
-  .session-doc-item:hover { background: #f8f9fa; }
-  .session-doc-item .doc-icon { width: 20px; text-align: center; margin-right: 6px; flex-shrink: 0; }
-  .session-doc-item .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .icon-pdf { color: #dc3545; }
-  .icon-word { color: #2b579a; }
-  .icon-excel { color: #217346; }
-  .icon-ppt { color: #d24726; }
-  .icon-csv { color: #28a745; }
-  .icon-code { color: #6f42c1; }
-  .icon-image { color: #17a2b8; }
-  .icon-text { color: #6c757d; }
 </style>
 {% endblock %}
 
 {% block body %}
+<div class="claire-page">
 <!-- Content Header -->
 <div class="content-header">
   <div class="container-fluid">
@@ -129,7 +250,7 @@
     <div class="row">
 
       <!-- Conversation Sidebar -->
-      <div class="col-md-3">
+      <div class="col-md-3 sidebar-col">
         <div class="card card-outline card-info">
           <div class="card-header d-flex align-items-center justify-content-between py-2">
             <h3 class="card-title mb-0"><i class="fas fa-comments mr-1"></i> Chats</h3>
@@ -142,7 +263,7 @@
               </button>
             </div>
           </div>
-          <div class="card-body p-2" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+          <div class="card-body p-2">
             {% for date_key, convs in grouped_conversations.items %}
             <div class="mb-3">
               <small class="text-muted font-weight-bold text-uppercase px-1">
@@ -152,7 +273,7 @@
                 {% endif %}
               </small>
               {% for conv in convs %}
-              <div class="conversation-item d-flex align-items-center justify-content-between px-2 py-1 rounded mb-1 {% if conv.pk == current_conv_id %}bg-light border-left border-primary{% endif %}"
+              <div class="conversation-item d-flex align-items-center justify-content-between px-2 py-1 rounded mb-1 {% if conv.pk == current_conv_id %}active-conv{% endif %}"
                    data-conv-id="{{ conv.pk }}" style="cursor:pointer;">
                 <div class="flex-grow-1 text-truncate" style="min-width:0;"
                      onclick="window.location.href='{% url 'claire-assistant' %}?conv_id={{ conv.pk }}'">
@@ -184,7 +305,7 @@
       </div>
 
       <!-- Chat Panel -->
-      <div class="col-md-6">
+      <div class="col-md-9 chat-col">
         <div class="card card-primary card-outline direct-chat direct-chat-primary">
           <div class="card-header">
             <h3 class="card-title">
@@ -277,87 +398,12 @@
         </div>
       </div>
 
-      <!-- Sidebar info -->
-      <div class="col-md-3">
-        <div class="card card-info card-outline">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-info-circle mr-1"></i> About Claire</h3>
-          </div>
-          <div class="card-body">
-            <p class="text-sm">Claire is your AI-powered assistant trained on your knowledge base documents.</p>
-            <hr>
-            <p class="text-sm mb-1"><strong>Session:</strong></p>
-            <p class="text-muted text-sm">#{{ conversation.pk }}</p>
-            <p class="text-sm mb-1"><strong>Messages:</strong></p>
-            <p class="text-muted text-sm" id="msgCount">{{ chat_messages|length }}</p>
-          </div>
-        </div>
 
-        <!-- Session Documents -->
-        <div class="card card-success card-outline">
-          <div class="card-header">
-            <h3 class="card-title">
-              <i class="fas fa-file-upload mr-1"></i> Session Files
-              {% if session_documents %}
-              <span class="badge badge-info ml-1" id="sessionDocCount">{{ session_documents|length }}</span>
-              {% endif %}
-            </h3>
-          </div>
-          <div class="card-body p-2 session-docs-list" id="sessionDocsList">
-            {% for doc in session_documents %}
-            <div class="session-doc-item">
-              <span class="doc-icon">
-                {% if doc.file_type == 'pdf' %}
-                  <i class="fas fa-file-pdf icon-pdf"></i>
-                {% elif doc.file_type == 'docx' or doc.file_type == 'doc' %}
-                  <i class="fas fa-file-word icon-word"></i>
-                {% elif doc.file_type == 'xlsx' or doc.file_type == 'xls' %}
-                  <i class="fas fa-file-excel icon-excel"></i>
-                {% elif doc.file_type == 'pptx' or doc.file_type == 'ppt' %}
-                  <i class="fas fa-file-powerpoint icon-ppt"></i>
-                {% elif doc.file_type == 'csv' %}
-                  <i class="fas fa-file-csv icon-csv"></i>
-                {% elif doc.file_type == 'json' or doc.file_type == 'xml' %}
-                  <i class="fas fa-file-code icon-code"></i>
-                {% elif doc.file_type == 'jpg' or doc.file_type == 'jpeg' or doc.file_type == 'png' or doc.file_type == 'gif' %}
-                  <i class="fas fa-file-image icon-image"></i>
-                {% elif doc.file_type == 'txt' or doc.file_type == 'md' %}
-                  <i class="fas fa-file-alt icon-text"></i>
-                {% else %}
-                  <i class="fas fa-file icon-text"></i>
-                {% endif %}
-              </span>
-              <span class="doc-name" title="{{ doc.original_filename }}">{{ doc.original_filename|truncatechars:20 }}</span>
-              {% if doc.is_processed %}
-              <span class="badge badge-success">Indexed</span>
-              {% else %}
-              <span class="badge badge-warning">Pending</span>
-              {% endif %}
-            </div>
-            {% empty %}
-            <p class="text-muted text-sm mb-0 px-1">No files uploaded yet.</p>
-            {% endfor %}
-          </div>
-        </div>
-
-        <div class="card card-light card-outline">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-lightbulb mr-1 text-warning"></i> Tips</h3>
-          </div>
-          <div class="card-body p-2">
-            <ul class="text-sm pl-3 mb-0">
-              <li>Upload documents to the knowledge base for better answers.</li>
-              <li>Attach files with <i class="fas fa-paperclip"></i> to ask about specific documents.</li>
-              <li>Be specific in your questions.</li>
-              <li>Start a New Chat to reset context.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
 
     </div>
   </div>
 </section>
+</div><!-- /.claire-page -->
 
 <!-- Markdown libs -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
@@ -375,7 +421,6 @@
   var chatInput = document.getElementById('chatInput');
   var sendBtn = document.getElementById('sendBtn');
   var typingIndicator = document.getElementById('typingIndicator');
-  var msgCountEl = document.getElementById('msgCount');
   var attachBtn = document.getElementById('attachBtn');
   var fileInput = document.getElementById('fileInput');
   var fileUploadArea = document.getElementById('fileUploadArea');
@@ -384,10 +429,8 @@
   var fileProgress = document.getElementById('fileProgress');
   var fileProgressBar = document.getElementById('fileProgressBar');
   var fileProgressText = document.getElementById('fileProgressText');
-  var sessionDocsList = document.getElementById('sessionDocsList');
   var emptyState = document.getElementById('emptyState');
   var currentConversationId = {{ conversation.pk }};
-  var msgCount = parseInt(msgCountEl.textContent) || 0;
   var pendingFile = null;
 
   // Configure marked for markdown rendering
@@ -448,8 +491,6 @@
       }
     }
     chatMessages.insertBefore(bubble, typingIndicator);
-    msgCount++;
-    msgCountEl.textContent = msgCount;
     scrollToBottom();
     return bubble;
   }
@@ -514,8 +555,6 @@
           var data = JSON.parse(xhr.responseText);
           // Add system message about the upload
           appendBubble('system', '📎 File uploaded: **' + data.filename + '** (' + data.chunks + ' chunks indexed)');
-          // Update session docs sidebar
-          addSessionDocToSidebar(data.filename);
           resolve(data);
         } else {
           var err = 'Upload failed';
@@ -555,33 +594,6 @@
       'gif':  'fa-file-image icon-image'
     };
     return iconMap[ext] || 'fa-file icon-text';
-  }
-
-  function addSessionDocToSidebar(filename) {
-    // Remove "No files" message if present
-    var noFiles = sessionDocsList.querySelector('.text-muted');
-    if (noFiles) noFiles.remove();
-    var item = document.createElement('div');
-    item.className = 'session-doc-item';
-    var short = filename.length > 20 ? filename.substring(0, 17) + '...' : filename;
-    var iconClass = getFileIcon(filename);
-    item.innerHTML =
-      '<span class="doc-icon"><i class="fas ' + iconClass + '"></i></span>' +
-      '<span class="doc-name" title="' + escapeHtml(filename) + '">' + escapeHtml(short) + '</span>' +
-      '<span class="badge badge-success">Indexed</span>';
-    sessionDocsList.appendChild(item);
-    // Update count badge
-    var countBadge = document.getElementById('sessionDocCount');
-    if (countBadge) {
-      countBadge.textContent = parseInt(countBadge.textContent) + 1;
-    } else {
-      var header = document.querySelector('#sessionDocsList').closest('.card').querySelector('.card-title');
-      var badge = document.createElement('span');
-      badge.className = 'badge badge-info ml-1';
-      badge.id = 'sessionDocCount';
-      badge.textContent = '1';
-      header.appendChild(badge);
-    }
   }
 
   function sendMessage() {
@@ -649,8 +661,6 @@
             } else if (streamBubble) {
               streamBubble.querySelector('.bubble-content').innerHTML = renderMarkdown(fullContent);
             }
-            msgCount++;
-            msgCountEl.textContent = msgCount;
             sendBtn.disabled = false;
             chatInput.focus();
             return;
@@ -679,8 +689,6 @@
                 if (streamBubble) {
                   streamBubble.querySelector('.bubble-content').innerHTML = renderMarkdown(fullContent);
                 }
-                msgCount++;
-                msgCountEl.textContent = msgCount;
                 sendBtn.disabled = false;
                 chatInput.focus();
                 return;

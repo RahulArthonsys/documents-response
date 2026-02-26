@@ -107,7 +107,7 @@ def get_embeddings():
 # ══════════════════════════════════════════════════════════
 # 2. System Prompt
 # ══════════════════════════════════════════════════════════
-SYSTEM_PROMPT = """You are Claire — an expert AI assistant powered by a document-grounded RAG system.
+SYSTEM_PROMPT = """You are ArthaCore AI — an expert AI assistant powered by a document-grounded RAG system.
 
 CAPABILITIES:
 - Search and retrieve information from knowledge base documents
@@ -330,7 +330,7 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
     # Step 5: RAG prompt — strict document grounding
     rag_prompt = (
         f"{custom_prompt}"
-        "You are Claire, answering from knowledge base documents.\n\n"
+        "You are ArthaCore AI, answering from knowledge base documents.\n\n"
         "==================== DOCUMENTS ====================\n"
         f"{doc_content}\n"
         "==================== END ====================\n\n"
@@ -413,7 +413,7 @@ def session_document_search(query: str, conversation_id: int, specific_document:
 
     # Step 4: Session document RAG prompt
     comprehensive_prompt = (
-        "You are Claire, an INTELLIGENT DOCUMENT-GROUNDED Q&A system.\n\n"
+        "You are ArthaCore AI, an INTELLIGENT DOCUMENT-GROUNDED Q&A system.\n\n"
         f"📄 Document: \"{source_filename}\"{multi_doc_context}\n\n"
         f"❓ User Query: \"{query}\"\n\n"
         "📚 Document Content:\n"
@@ -729,7 +729,7 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
         if session_context:
             system_msg = (
                 f"{custom_prompt}"
-                "You are Claire, analyzing the user's uploaded document.\n\n"
+                "You are ArthaCore AI, analyzing the user's uploaded document.\n\n"
                 "📋 SOURCE RULES:\n"
                 "- Ground ALL answers in the document content below\n"
                 "- You MAY synthesize across sections\n"
@@ -742,7 +742,7 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
         elif kb_context:
             system_msg = (
                 f"{custom_prompt}"
-                "You are Claire, answering from knowledge base documents.\n\n"
+                "You are ArthaCore AI, answering from knowledge base documents.\n\n"
                 "RULES:\n"
                 "- Base answers ONLY on the provided context\n"
                 "- If the context doesn't contain the answer, say so honestly\n"
@@ -753,7 +753,7 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
         else:
             system_msg = (
                 f"{custom_prompt}"
-                "You are Claire, a helpful AI assistant.\n"
+                "You are ArthaCore AI, a helpful AI assistant.\n"
                 "Answer user questions clearly and concisely using Markdown formatting."
             )
 
@@ -905,7 +905,7 @@ class KnowledgeDocumentDeleteView(LoginRequiredMixin, View):
 
 
 class ClaireAssistantView(LoginRequiredMixin, View):
-    """Main Claire chatbot interface with midnight auto-reset."""
+    """Main ArthaCore AI chatbot interface with midnight auto-reset."""
     login_url = 'admin-login'
     template_name = 'ai_chatbot/claire_assistant.html'
 
@@ -993,7 +993,7 @@ class ClaireAssistantView(LoginRequiredMixin, View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ClaireAskView(LoginRequiredMixin, View):
-    """AJAX endpoint: send a message to Claire and get a response (supports SSE streaming)."""
+    """AJAX endpoint: send a message to ArthaCore AI and get a response (supports SSE streaming)."""
     login_url = 'admin-login'
 
     def post(self, request):

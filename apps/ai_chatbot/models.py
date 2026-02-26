@@ -47,7 +47,7 @@ class KnowledgeDocument(models.Model):
 
 
 class AgentPromptConfig(models.Model):
-    """Configuration for the Claire AI assistant prompt."""
+    """Configuration for the ArthaCore AI assistant prompt."""
     custom_prompt = models.TextField(
         blank=True, null=True,
         help_text="Custom system prompt for the AI assistant"

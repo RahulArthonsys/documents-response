@@ -232,13 +232,13 @@
     <div class="row mb-2">
       <div class="col-sm-6">
         <h1 class="m-0 text-dark">
-          <i class="fas fa-robot text-info mr-2"></i>Claire Assistant
+          <i class="fas fa-robot text-info mr-2"></i>ArthaCore AI
         </h1>
       </div>
       <div class="col-sm-6">
         <ol class="breadcrumb float-sm-right">
           <li class="breadcrumb-item"><a href="{% url 'admin-dashboard' %}">Dashboard</a></li>
-          <li class="breadcrumb-item active">Claire Assistant</li>
+          <li class="breadcrumb-item active">ArthaCore AI</li>
         </ol>
       </div>
     </div>
@@ -307,17 +307,13 @@
       <!-- Chat Panel -->
       <div class="col-md-9 chat-col">
         <div class="card card-primary card-outline direct-chat direct-chat-primary">
-          <div class="card-header">
-            <h3 class="card-title">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">
               <i class="fas fa-comment-dots mr-2"></i>
               {{ conversation.title|default:"New Conversation" }}
             </h3>
-            <div class="card-tools">
-              <a href="{% url 'claire-assistant' %}?new=1" class="btn btn-outline-secondary btn-sm"
-                 title="Start new conversation">
-                <i class="fas fa-plus mr-1"></i> New Chat
-              </a>
-              <a href="{% url 'claire-history' %}" class="btn btn-outline-info btn-sm ml-1">
+            <div class="ml-auto">
+              <a href="{% url 'claire-history' %}" class="btn btn-warning btn-sm font-weight-bold shadow-sm">
                 <i class="fas fa-history mr-1"></i> History
               </a>
             </div>
@@ -329,7 +325,7 @@
                 {% if not chat_messages %}
                 <div class="text-center text-muted mt-4" id="emptyState">
                   <i class="fas fa-robot fa-3x mb-3 text-info"></i>
-                  <p class="font-weight-bold">Hello! I'm Claire, your AI assistant.</p>
+                  <p class="font-weight-bold">Hello! I'm ArthaCore AI, your AI assistant.</p>
                   <p>Ask me anything about your knowledge base documents, or upload a file to analyze.</p>
                 </div>
                 {% endif %}

@@ -240,8 +240,13 @@ function TypingIndicator() {
   return (
     <div className="nova-bubble-wrap assistant">
       <div className="nova-bubble-avatar"><i className="fas fa-robot"></i></div>
-      <div className="nova-bubble assistant">
-        <div className="nova-typing"><span></span><span></span><span></span></div>
+      <div className="nova-bubble assistant" style={{ padding: '0', background: 'transparent', border: 'none', boxShadow: 'none' }}>
+        <div className="nova-typing">
+          <div className="nova-typing-label">
+            <span className="nova-typing-name">ArthaCore</span> is typing
+          </div>
+          <div className="nova-typing-dots"><span></span><span></span><span></span></div>
+        </div>
       </div>
     </div>
   );
@@ -450,8 +455,9 @@ function ClaireApp() {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': C.csrfToken },
       body: JSON.stringify({ message: msg, conversation_id: convIdRef.current, stream: true })
     }).then(response => {
-      setIsTyping(false);
+      // Do NOT hide typing here — keep indicator visible until first real token
       if (!response.ok) {
+        setIsTyping(false);
         return response.json().then(d => {
           addMessage('assistant', 'Error: ' + (d.error || 'Unknown error'));
           setIsSending(false);
@@ -459,18 +465,16 @@ function ClaireApp() {
         });
       }
 
-      // Create the stream bubble
-      streamMsgId = nextIdRef.current++;
-      setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '' }]);
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let typingHidden = false;
 
       function processStream() {
         return reader.read().then(result => {
           if (result.done) {
-            if (streamContentRef.current) {
+            if (!typingHidden) { setIsTyping(false); typingHidden = true; }
+            if (streamContentRef.current && streamMsgId !== null) {
               updateMessage(streamMsgId, streamContentRef.current);
             }
             setIsSending(false);
@@ -487,12 +491,22 @@ function ClaireApp() {
             if (!trimmed.startsWith('data: ')) continue;
             try {
               const data = JSON.parse(trimmed.substring(6));
-              if (data.type === 'token') {
+              if (data.type === 'start') {
+                // Server acknowledged — keep typing visible
+              } else if (data.type === 'token') {
+                // Hide typing & create bubble on very first token
+                if (!typingHidden) {
+                  setIsTyping(false);
+                  typingHidden = true;
+                  streamMsgId = nextIdRef.current++;
+                  setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '' }]);
+                }
                 streamContentRef.current += data.content;
                 updateMessage(streamMsgId, streamContentRef.current);
               } else if (data.type === 'done') {
+                if (!typingHidden) { setIsTyping(false); typingHidden = true; }
                 convIdRef.current = data.conversation_id || convIdRef.current;
-                updateMessage(streamMsgId, streamContentRef.current);
+                if (streamMsgId !== null) updateMessage(streamMsgId, streamContentRef.current);
                 setIsSending(false);
                 if (inputRef.current) inputRef.current.focus();
                 return;
@@ -671,7 +685,7 @@ function ClaireApp() {
               <i className="fas fa-paperclip"></i>
             </button>
             <textarea className="nova-chat-textarea" rows="1" ref={inputRef}
-              placeholder="Message Claire..." value={inputVal}
+              placeholder="Message ArthaCore..." value={inputVal}
               onChange={e => setInputVal(e.target.value)}
               onKeyDown={handleKeyDown}
               style={{ resize: 'none', overflow: 'hidden' }}

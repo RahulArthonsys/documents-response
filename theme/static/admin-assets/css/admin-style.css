@@ -1824,22 +1824,44 @@ body.sidebar-mini.sidebar-collapse .nova-chat-page { left: 4.6rem; }
 }
 .nova-bubble table th { background: var(--nova-50); font-weight: 600; }
 
-/* Typing indicator */
 /* ── Typing indicator ── */
 .nova-typing {
-  display: flex; gap: 5px; align-items: center; padding: 14px 20px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 12px 20px 13px;
   background: var(--nova-white); border: 1px solid var(--nova-200);
-  border-radius: 22px; border-bottom-left-radius: 6px; width: fit-content;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border-radius: 22px; border-bottom-left-radius: 6px;
+  width: fit-content; min-width: 180px;
+  box-shadow: 0 4px 16px rgba(15,23,42,0.08);
   animation: bubbleFromLeft 0.22s cubic-bezier(.22,.68,0,1.12) both;
 }
-.nova-typing span {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--nova-400); display: inline-block;
-  animation: bounce 1.3s cubic-bezier(.4,0,.6,1) infinite;
+.nova-typing-label {
+  font-size: 0.8rem; font-weight: 600; color: #475569;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
 }
-.nova-typing span:nth-child(2) { animation-delay: 0.18s; }
-.nova-typing span:nth-child(3) { animation-delay: 0.36s; }
+.nova-typing-label .nova-typing-name {
+  background: linear-gradient(90deg, #4f8ef7, #6366f1);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; font-weight: 700;
+  animation: novaNamePulse 2s ease-in-out infinite;
+}
+@keyframes novaNamePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+.nova-typing-dots { display: flex; gap: 5px; align-items: center; }
+.nova-typing-dots span {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  display: inline-block;
+  box-shadow: 0 0 5px rgba(79,142,247,0.4);
+  animation: novaBounce 1.3s cubic-bezier(.4,0,.6,1) infinite;
+}
+.nova-typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.nova-typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes novaBounce {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.5; box-shadow: 0 0 4px rgba(79,142,247,0.3); }
+  30%           { transform: translateY(-8px); opacity: 1;   box-shadow: 0 5px 12px rgba(79,142,247,0.6); }
+}
 
 /* ── Empty state — Premium Hero ── */
 .nova-chat-empty {
@@ -2077,8 +2099,18 @@ body.dark-mode .nova-bubble-wrap.system .nova-bubble {
 }
 body.dark-mode .nova-typing {
   background: var(--nova-800); border-color: var(--nova-700);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
 }
-body.dark-mode .nova-typing span { background: var(--nova-500); }
+body.dark-mode .nova-typing-label { color: #8b949e; }
+body.dark-mode .nova-typing-label .nova-typing-name {
+  background: linear-gradient(90deg, #60a5fa, #818cf8);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+body.dark-mode .nova-typing-dots span {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  box-shadow: 0 0 6px rgba(59,130,246,0.5);
+}
 
 /* Input dark */
 body.dark-mode .nova-chat-input-area {

@@ -142,23 +142,26 @@ window.claireWidgetData = {
 <!-- ── Widget HTML ── -->
 <div id="claireWidget">
   <!-- Toggle button -->
-  <button id="claireToggleBtn" title="Chat with Claire" aria-label="Open Claire chat">
+  <button id="claireToggleBtn" title="Chat with ArthaCore" aria-label="Open ArthaCore chat">
     <i class="fas fa-robot" id="claireToggleIcon"></i>
     <span class="claire-notif-dot" id="claireNotifDot" style="display:none;"></span>
   </button>
 
   <!-- Chat window -->
-  <div id="claireWindow" class="claire-window" style="display:none;" role="dialog" aria-label="Claire AI Chat">
+  <div id="claireWindow" class="claire-window" style="display:none;" role="dialog" aria-label="ArthaCore AI Chat">
     <!-- Header -->
     <div class="claire-header">
       <div class="claire-header-info">
         <div class="claire-avatar"><i class="fas fa-robot"></i></div>
         <div>
-          <div class="claire-title">Claire</div>
+          <div class="claire-title">ArthaCore</div>
           <div class="claire-subtitle" id="claireStatus"><span class="claire-status-dot"></span> AI Assistant &middot; Online</div>
         </div>
       </div>
       <div class="claire-header-btns">
+        <button class="claire-hdr-btn" id="claireDarkBtn" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <i class="fas fa-moon" id="claireDarkIcon"></i>
+        </button>
         <a href="{% url 'claire-assistant' %}" class="claire-hdr-btn" title="Open full chat" target="_self">
           <i class="fas fa-external-link-alt"></i>
         </a>
@@ -193,7 +196,7 @@ window.claireWidgetData = {
       <input type="file" id="claireFileInput" style="display:none;"
              accept=".pdf,.txt,.doc,.docx,.pptx,.xlsx,.csv,.json,.xml,.png,.jpg,.jpeg">
       <textarea id="claireInput" class="claire-input" rows="1"
-                placeholder="Ask Claire anything…" aria-label="Message input"></textarea>
+                placeholder="Ask ArthaCore anything…" aria-label="Message input"></textarea>
       <button id="claireSendBtn" class="claire-send-btn" title="Send" aria-label="Send message">
         <i class="fas fa-paper-plane"></i>
       </button>
@@ -437,24 +440,58 @@ window.claireWidgetData = {
 
 /* ── Typing Indicator ── */
 .claire-typing {
-  display: flex; gap: 5px; align-items: center;
-  padding: 11px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 16px 10px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 18px; border-bottom-left-radius: 5px;
+  border-radius: 18px;
+  border-bottom-left-radius: 5px;
   width: fit-content;
-  box-shadow: 0 2px 8px rgba(15,23,42,0.06);
+  min-width: 160px;
+  box-shadow: 0 2px 12px rgba(15,23,42,0.08);
+  animation: claireBubbleIn 0.22s cubic-bezier(.22,.68,0,1.1) both;
 }
-.claire-typing span {
+.claire-typing-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.claire-typing-label .claire-typing-name {
+  background: linear-gradient(90deg, #4f8ef7, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+  animation: claireNamePulse 2s ease-in-out infinite;
+}
+@keyframes claireNamePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+.claire-typing-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.claire-typing-dots span {
   width: 7px; height: 7px; border-radius: 50%;
-  background: #94a3b8; display: inline-block;
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  display: inline-block;
   animation: claireTypingBounce 1.3s cubic-bezier(.4,0,.6,1) infinite;
+  box-shadow: 0 0 4px rgba(79,142,247,0.4);
 }
-.claire-typing span:nth-child(2) { animation-delay: 0.18s; }
-.claire-typing span:nth-child(3) { animation-delay: 0.36s; }
+.claire-typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.claire-typing-dots span:nth-child(3) { animation-delay: 0.36s; }
 @keyframes claireTypingBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
-  30% { transform: translateY(-6px); opacity: 1; }
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.5; box-shadow: 0 0 4px rgba(79,142,247,0.3); }
+  30%           { transform: translateY(-7px); opacity: 1;   box-shadow: 0 4px 10px rgba(79,142,247,0.6); }
 }
 
 /* ── Welcome Screen ── */
@@ -591,6 +628,295 @@ window.claireWidgetData = {
   #claireWidget { bottom: 16px; right: 12px; }
   .claire-resize-handle { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ENHANCED ANIMATIONS
+   ══════════════════════════════════════════════════════════════ */
+
+/* Improved slide-in — with blur */
+@keyframes claireSlideIn {
+  0%   { opacity: 0; transform: translateY(22px) scale(0.88); filter: blur(5px); }
+  55%  { filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0)   scale(1);    filter: blur(0); }
+}
+
+/* Improved bubble entrance */
+@keyframes claireBubbleIn {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.91); }
+  65%  { transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* Pulsing ring around toggle button */
+#claireToggleBtn::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 24px;
+  background: transparent;
+  border: 2px solid rgba(79,142,247,0.45);
+  animation: claireRingExpand 2.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes claireRingExpand {
+  0%   { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0;   transform: scale(1.55); }
+}
+
+/* Second ring — delayed */
+#claireToggleBtn::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 24px;
+  background: transparent;
+  border: 2px solid rgba(99,102,241,0.3);
+  animation: claireRingExpand 2.4s ease-out 1.2s infinite;
+  pointer-events: none;
+}
+
+/* Shimmer sweep on toggle button (light mode) */
+@keyframes claireShimmer {
+  0%        { left: -100%; opacity: 0; }
+  10%       { opacity: 1; }
+  50%, 100% { left: 160%; opacity: 0; }
+}
+
+/* Status dot enhanced glow */
+.claire-status-dot {
+  animation: claireStatusGlow 2.2s ease-in-out infinite;
+}
+@keyframes claireStatusGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(74,222,128,0.7);  transform: scale(1); }
+  50%       { box-shadow: 0 0 14px rgba(74,222,128,1), 0 0 28px rgba(74,222,128,0.45); transform: scale(1.25); }
+}
+
+/* Slide-out / close animation */
+.claire-window.claire-closing {
+  animation: claireSlideOut 0.22s cubic-bezier(.4,0,1,1) both !important;
+}
+@keyframes claireSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1);    filter: blur(0); }
+  to   { opacity: 0; transform: translateY(16px) scale(0.9); filter: blur(4px); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DARK MODE  (.claire-dark on #claireWidget)  — BLUE THEME
+   ══════════════════════════════════════════════════════════════ */
+
+/* Toggle button — dark blue variant */
+#claireWidget.claire-dark #claireToggleBtn {
+  background: linear-gradient(135deg, #0a1628 0%, #0f2a5c 45%, #1d4ed8 100%);
+  box-shadow: 0 8px 28px rgba(37,99,235,0.6), 0 2px 8px rgba(0,0,0,0.3);
+  animation: claireDarkBtnPulse 2.6s cubic-bezier(.4,0,.6,1) infinite;
+}
+@keyframes claireDarkBtnPulse {
+  0%,100% { box-shadow: 0 8px 28px rgba(37,99,235,0.6),  0 2px 8px rgba(0,0,0,0.3); }
+  50%      { box-shadow: 0 8px 38px rgba(59,130,246,0.8), 0 0 0 10px rgba(37,99,235,0), 0 2px 8px rgba(0,0,0,0.3); }
+}
+
+/* Dark ring colour — blue */
+#claireWidget.claire-dark #claireToggleBtn::before {
+  border-color: rgba(59,130,246,0.65);
+}
+#claireWidget.claire-dark #claireToggleBtn::after {
+  border-color: rgba(96,165,250,0.4);
+}
+
+/* Dark shimmer on toggle button */
+#claireWidget.claire-dark #claireToggleBtn .claire-dark-shimmer {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 55%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(147,197,253,0.22), transparent);
+  animation: claireShimmer 3.2s ease-in-out infinite;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Dark chat window — deep navy */
+#claireWidget.claire-dark .claire-window {
+  background: #06090f;
+  border: 1px solid rgba(37,99,235,0.32);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7),
+              0 0 0 1px rgba(59,130,246,0.1),
+              0 0 52px rgba(29,78,216,0.1);
+}
+
+/* Dark animated gradient header — blue */
+#claireWidget.claire-dark .claire-header {
+  background: linear-gradient(135deg, #060d1f, #0a1628, #0f2a5c, #1d4ed8, #0f2a5c);
+  background-size: 300% 300%;
+  animation: claireDarkHeaderShift 9s ease-in-out infinite;
+}
+@keyframes claireDarkHeaderShift {
+  0%,100% { background-position: 0%   50%; }
+  33%      { background-position: 100% 0%; }
+  66%      { background-position: 50%  100%; }
+}
+
+/* Dark avatar glow — blue */
+#claireWidget.claire-dark .claire-avatar {
+  background: rgba(37,99,235,0.25);
+  animation: claireAvatarGlow 3.2s ease-in-out infinite;
+}
+@keyframes claireAvatarGlow {
+  0%,100% { box-shadow: 0 2px 8px rgba(37,99,235,0.4),  0 0 16px rgba(29,78,216,0.12); }
+  50%      { box-shadow: 0 2px 8px rgba(59,130,246,0.7), 0 0 32px rgba(37,99,235,0.4); }
+}
+
+/* Dark messages area — blue star dots */
+#claireWidget.claire-dark .claire-messages {
+  background: #06090f;
+  background-image:
+    radial-gradient(1px 1px at 8%  14%, rgba(59,130,246,0.65)  0%, transparent 100%),
+    radial-gradient(1px 1px at 22% 62%, rgba(37,99,235,0.5)    0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 30%, rgba(96,165,250,0.45)  0%, transparent 100%),
+    radial-gradient(1px 1px at 68% 78%, rgba(29,78,216,0.45)   0%, transparent 100%),
+    radial-gradient(1px 1px at 83% 20%, rgba(147,197,253,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 88%, rgba(37,99,235,0.4)    0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 90% 50%, rgba(59,130,246,0.35) 0%, transparent 100%);
+}
+
+/* Dark assistant bubble */
+#claireWidget.claire-dark .claire-bubble-wrap.assistant .claire-bubble {
+  background: #0d1526;
+  color: #e6edf3;
+  border: 1px solid rgba(37,99,235,0.25);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4), 0 0 10px rgba(29,78,216,0.07);
+}
+
+/* Dark user bubble — blue gradient */
+#claireWidget.claire-dark .claire-bubble-wrap.user .claire-bubble {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  box-shadow: 0 2px 16px rgba(37,99,235,0.5), 0 0 12px rgba(29,78,216,0.3);
+}
+
+/* Dark typing indicator */
+#claireWidget.claire-dark .claire-typing {
+  background: #0d1526;
+  border: 1px solid rgba(37,99,235,0.25);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+}
+#claireWidget.claire-dark .claire-typing-label { color: #8b949e; }
+#claireWidget.claire-dark .claire-typing-label .claire-typing-name {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+#claireWidget.claire-dark .claire-typing-dots span {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  box-shadow: 0 0 6px rgba(59,130,246,0.5);
+}
+@keyframes claireTypingBounce {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.5; }
+  30%           { transform: translateY(-7px); opacity: 1; }
+}
+
+/* Dark system bubble */
+#claireWidget.claire-dark .claire-bubble-wrap.system .claire-bubble {
+  background: linear-gradient(135deg, #14291e, #14532d);
+  color: #4ade80;
+  border: 1px solid rgba(74,222,128,0.2);
+}
+
+/* Dark welcome */
+#claireWidget.claire-dark .claire-welcome-icon {
+  background: linear-gradient(135deg, rgba(29,78,216,0.2), rgba(37,99,235,0.15));
+}
+#claireWidget.claire-dark .claire-welcome-icon i { color: #3b82f6; }
+#claireWidget.claire-dark .claire-welcome-name { color: #e6edf3; }
+#claireWidget.claire-dark .claire-welcome p { color: #8b949e; }
+#claireWidget.claire-dark .claire-chip {
+  background: rgba(37,99,235,0.14);
+  color: #60a5fa;
+  border-color: rgba(59,130,246,0.32);
+}
+
+/* Dark footer */
+#claireWidget.claire-dark .claire-footer {
+  background: #0d1526;
+  border-top: 1px solid rgba(37,99,235,0.16);
+}
+
+/* Dark input */
+#claireWidget.claire-dark .claire-input {
+  background: #06090f;
+  border-color: rgba(37,99,235,0.35);
+  color: #e6edf3;
+  caret-color: #3b82f6;
+}
+#claireWidget.claire-dark .claire-input::placeholder { color: #4b5563; }
+#claireWidget.claire-dark .claire-input:focus {
+  border-color: #3b82f6;
+  background: #06090f;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.25), 0 0 20px rgba(29,78,216,0.12);
+}
+
+/* Dark send button — blue */
+#claireWidget.claire-dark .claire-send-btn {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 2px 12px rgba(37,99,235,0.6);
+}
+#claireWidget.claire-dark .claire-send-btn:hover {
+  box-shadow: 0 4px 20px rgba(37,99,235,0.75), 0 0 28px rgba(29,78,216,0.35);
+}
+
+/* Dark attach button */
+#claireWidget.claire-dark .claire-attach-btn { color: #4b5563; }
+#claireWidget.claire-dark .claire-attach-btn:hover {
+  background: rgba(37,99,235,0.18);
+  color: #3b82f6;
+}
+
+/* Dark header buttons */
+#claireWidget.claire-dark .claire-hdr-btn {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+}
+#claireWidget.claire-dark .claire-hdr-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* Dark scrollbar */
+#claireWidget.claire-dark .claire-messages::-webkit-scrollbar-thumb {
+  background: rgba(37,99,235,0.5);
+}
+
+/* Dark notification dot */
+#claireWidget.claire-dark .claire-notif-dot {
+  background: #60a5fa;
+  border-color: #06090f;
+}
+
+/* Dark resize handle */
+#claireWidget.claire-dark .claire-resize-handle { color: rgba(59,130,246,0.6); }
+#claireWidget.claire-dark .claire-resize-handle:hover {
+  color: #93c5fd;
+  background: rgba(37,99,235,0.16);
+}
+
+/* Dark upload bar */
+#claireWidget.claire-dark .claire-upload-bar {
+  background: linear-gradient(90deg, #14291e, #1a3a26);
+  border-top-color: rgba(74,222,128,0.15);
+  color: #4ade80;
+}
+
+/* Dark markdown inside bubbles */
+#claireWidget.claire-dark .claire-bubble-wrap.assistant .claire-bubble code {
+  background: rgba(37,99,235,0.2);
+  color: #93c5fd;
+}
+#claireWidget.claire-dark .claire-bubble pre {
+  background: #020510;
+  border: 1px solid rgba(37,99,235,0.22);
+}
+#claireWidget.claire-dark .claire-bubble table th { background: #0d1526; color: #60a5fa; }
+#claireWidget.claire-dark .claire-bubble table th,
+#claireWidget.claire-dark .claire-bubble table td { border-color: rgba(37,99,235,0.22); }
 </style>
 
 <!-- ── Widget JavaScript ── -->
@@ -616,7 +942,7 @@ window.claireWidgetData = {
   var $widget, $window, $messages, $input, $sendBtn,
       $attachBtn, $fileInput, $uploadBar, $uploadName,
       $removeFile, $uploadProgress, $progressBar,
-      $toggleBtn, $closeBtn, $notifDot;
+      $toggleBtn, $closeBtn, $notifDot, $darkBtn, $darkIcon;
 
   function $(id) { return document.getElementById(id); }
 
@@ -636,13 +962,19 @@ window.claireWidgetData = {
     $toggleBtn    = document.getElementById('claireToggleBtn');
     $closeBtn     = document.getElementById('claireCloseBtn');
     $notifDot     = document.getElementById('claireNotifDot');
+    $darkBtn      = document.getElementById('claireDarkBtn');
+    $darkIcon     = document.getElementById('claireDarkIcon');
 
     // Restore state
     loadState();
 
+    // Apply saved dark mode before any render
+    applyDarkMode(localStorage.getItem('claire_dark_mode') === '1');
+
     // Bind events
     $toggleBtn.addEventListener('click', toggleWidget);
     $closeBtn.addEventListener('click', closeWidget);
+    if ($darkBtn) $darkBtn.addEventListener('click', toggleDarkMode);
     $sendBtn.addEventListener('click', sendMessage);
     $input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -675,10 +1007,50 @@ window.claireWidgetData = {
   }
 
   function closeWidget() {
-    $window.style.display = 'none';
-    state.isOpen = false;
-    document.getElementById('claireToggleIcon').className = 'fas fa-robot';
-    saveState();
+    $window.classList.add('claire-closing');
+    setTimeout(function () {
+      $window.style.display = 'none';
+      $window.classList.remove('claire-closing');
+      state.isOpen = false;
+      document.getElementById('claireToggleIcon').className = 'fas fa-robot';
+      saveState();
+    }, 220);
+  }
+
+  // ── Dark mode ─────────────────────────────────────────────────
+  function applyDarkMode(isDark) {
+    var widget = document.getElementById('claireWidget');
+    if (!widget) return;
+    if (isDark) {
+      widget.classList.add('claire-dark');
+      if ($darkIcon) $darkIcon.className = 'fas fa-sun';
+      if ($darkBtn)  $darkBtn.title = 'Switch to light mode';
+      // Inject shimmer element into toggle button if not present
+      var btn = document.getElementById('claireToggleBtn');
+      if (btn && !btn.querySelector('.claire-dark-shimmer')) {
+        var shimmer = document.createElement('span');
+        shimmer.className = 'claire-dark-shimmer';
+        btn.appendChild(shimmer);
+      }
+    } else {
+      widget.classList.remove('claire-dark');
+      if ($darkIcon) $darkIcon.className = 'fas fa-moon';
+      if ($darkBtn)  $darkBtn.title = 'Toggle dark mode';
+      // Remove shimmer
+      var btn = document.getElementById('claireToggleBtn');
+      if (btn) {
+        var shimmer = btn.querySelector('.claire-dark-shimmer');
+        if (shimmer) shimmer.remove();
+      }
+    }
+  }
+
+  function toggleDarkMode() {
+    var widget = document.getElementById('claireWidget');
+    if (!widget) return;
+    var isDark = !widget.classList.contains('claire-dark');
+    applyDarkMode(isDark);
+    try { localStorage.setItem('claire_dark_mode', isDark ? '1' : '0'); } catch (e) {}
   }
 
   // ── Welcome screen ───────────────────────────────────────────
@@ -686,7 +1058,7 @@ window.claireWidgetData = {
     $messages.innerHTML = '<div class="claire-welcome">' +
       '<i class="fas fa-robot"></i>' +
       '<p class="claire-welcome-name">Hi, ' + (DATA.userName || 'there') + '!</p>' +
-      '<p>I\'m Claire, your AI assistant.</p>' +
+      '<p>I\'m ArthaCore, your AI assistant.</p>' +
       '<p>Ask me anything or upload a file to get started.</p>' +
       '</div>';
   }
@@ -731,7 +1103,12 @@ window.claireWidgetData = {
     wrap.id = 'claireTypingWrap';
     wrap.innerHTML =
       '<div class="claire-bubble-icon"><i class="fas fa-robot"></i></div>' +
-      '<div class="claire-typing"><span></span><span></span><span></span></div>';
+      '<div class="claire-typing">' +
+        '<div class="claire-typing-label">' +
+          '<span class="claire-typing-name">ArthaCore</span> is typing' +
+        '</div>' +
+        '<div class="claire-typing-dots"><span></span><span></span><span></span></div>' +
+      '</div>';
     $messages.appendChild(wrap);
     scrollBottom();
   }
@@ -791,8 +1168,9 @@ window.claireWidgetData = {
       }),
     })
     .then(function (res) {
-      hideTyping();
+      // Do NOT hide typing here — keep it visible until the first token arrives
       if (!res.ok) {
+        hideTyping();
         return res.json().then(function (d) {
           addErrorBubble(d.error || 'Request failed');
           finishSend();
@@ -801,10 +1179,15 @@ window.claireWidgetData = {
       var reader = res.body.getReader();
       var decoder = new TextDecoder();
       var buffer = '';
+      var typingHidden = false;
 
       function pump() {
         return reader.read().then(function (result) {
-          if (result.done) { finishSend(); return; }
+          if (result.done) {
+            if (!typingHidden) { hideTyping(); typingHidden = true; }
+            finishSend();
+            return;
+          }
           buffer += decoder.decode(result.value, { stream: true });
           var lines = buffer.split('\n');
           buffer = lines.pop();
@@ -815,14 +1198,20 @@ window.claireWidgetData = {
             try {
               var data = JSON.parse(line.slice(6));
               if (data.type === 'start') {
-                streamBubble = createStreamingBubble();
+                // Server acknowledged — keep typing visible, bubble created on first token
               } else if (data.type === 'token') {
+                // Only hide typing and show the bubble when real words arrive
                 fullContent += data.content;
-                if (streamBubble) {
-                  streamBubble.innerHTML = renderMd(fullContent);
-                  scrollBottom();
+                if (!typingHidden) {
+                  hideTyping();
+                  typingHidden = true;
+                  streamBubble = createStreamingBubble();
                 }
+                if (!streamBubble) { streamBubble = createStreamingBubble(); }
+                streamBubble.innerHTML = renderMd(fullContent);
+                scrollBottom();
               } else if (data.type === 'done') {
+                if (!typingHidden) { hideTyping(); typingHidden = true; }
                 state.conversationId = data.conversation_id || state.conversationId;
                 if (streamBubble) streamBubble.innerHTML = renderMd(fullContent);
                 state.messages.push({ role: 'assistant', content: fullContent });

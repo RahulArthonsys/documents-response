@@ -4,14 +4,19 @@
 {% block body %}
 <section class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
+    <div class="row mb-2 align-items-center">
       <div class="col-sm-6">
-        <h1>Subscription Plans</h1>
+        <h1 style="display:flex;align-items:center;gap:10px;">
+          <span style="width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#4f8ef7,#6366f1);display:inline-flex;align-items:center;justify-content:center;">
+            <i class="fas fa-tags" style="color:#fff;font-size:.9rem;"></i>
+          </span>
+          Subscription Plans
+        </h1>
       </div>
       <div class="col-sm-6">
-        <ol class="breadcrumb float-sm-right">
+        <ol class="breadcrumb float-sm-right" style="background:transparent;margin:0;">
           <li class="breadcrumb-item"><a href="{% url 'admin-dashboard' %}">Dashboard</a></li>
-          <li class="breadcrumb-item active">Subscription Plans</li>
+          <li class="breadcrumb-item active">Plans</li>
         </ol>
       </div>
     </div>
@@ -22,57 +27,84 @@
   <div class="container-fluid">
     <div class="row">
       <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">All Plans</h3>
-            <div class="card-tools">
-              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm btn-primary">
-                <i class="fas fa-plus"></i> Add Plan
-              </a>
-            </div>
+        <div class="card" style="border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(15,23,42,.06);">
+          <div class="card-header" style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
+            <h3 class="card-title" style="font-weight:700;font-size:.9rem;color:#0f172a;margin:0;">All Plans</h3>
+            <a href="{% url 'admin-subscription-plan-add' %}"
+               style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;font-size:.8rem;font-weight:600;background:linear-gradient(135deg,#4f8ef7,#6366f1);color:#fff;text-decoration:none;box-shadow:0 2px 8px rgba(79,142,247,.3);transition:all .2s ease;">
+              <i class="fas fa-plus" style="font-size:.7rem;"></i> Add Plan
+            </a>
           </div>
           <div class="card-body table-responsive p-0">
-            <table class="table table-hover text-nowrap">
+            <table class="table table-hover text-nowrap" style="margin:0;">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th style="width:40px;">#</th>
                   <th>Name</th>
                   <th>Price</th>
                   <th>Duration</th>
                   <th>Status</th>
                   <th>Subscribers</th>
                   <th>Created</th>
-                  <th>Actions</th>
+                  <th style="text-align:right;">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for plan in plans %}
                 <tr>
-                  <td>{{ forloop.counter }}</td>
-                  <td><strong>{{ plan.name }}</strong><br><small class="text-muted">{{ plan.description|truncatechars:50 }}</small></td>
-                  <td>${{ plan.price }}</td>
-                  <td>{{ plan.get_duration_days_display }}</td>
+                  <td style="font-weight:600;color:#64748b;">{{ forloop.counter }}</td>
+                  <td>
+                    <div style="font-weight:600;color:#0f172a;">{{ plan.name }}</div>
+                    <div style="font-size:.75rem;color:#94a3b8;margin-top:1px;">{{ plan.description|truncatechars:50 }}</div>
+                  </td>
+                  <td style="font-weight:700;color:#0f172a;">${{ plan.price }}</td>
+                  <td>
+                    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;background:rgba(79,142,247,.08);color:#4f8ef7;font-size:.76rem;font-weight:600;">
+                      <i class="far fa-clock" style="font-size:.65rem;"></i> {{ plan.get_duration_days_display }}
+                    </span>
+                  </td>
                   <td>
                     {% if plan.is_active %}
-                      <span class="badge badge-success">Active</span>
+                      <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;background:rgba(34,197,94,.1);color:#16a34a;font-size:.75rem;font-weight:600;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Active
+                      </span>
                     {% else %}
-                      <span class="badge badge-secondary">Inactive</span>
+                      <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;background:rgba(100,116,139,.08);color:#64748b;font-size:.75rem;font-weight:600;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block;"></span> Inactive
+                      </span>
                     {% endif %}
                   </td>
-                  <td><span class="badge badge-info">{{ plan.subscriptions.count }}</span></td>
-                  <td>{{ plan.created_at|date:"d M Y" }}</td>
                   <td>
-                    <a href="{% url 'admin-subscription-plan-edit' plan.pk %}" class="btn btn-xs btn-warning text-white mr-1">
-                      <i class="fas fa-edit"></i> Edit
-                    </a>
-                    <a href="javascript:;" class="btn btn-xs btn-danger remove_record" data-url="{% url 'admin-subscription-plan-delete' plan.pk %}">
-                      <i class="fas fa-trash"></i> Delete
-                    </a>
+                    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;background:rgba(99,102,241,.08);color:#6366f1;font-size:.76rem;font-weight:600;">
+                      <i class="fas fa-users" style="font-size:.6rem;"></i> {{ plan.subscriptions.count }}
+                    </span>
+                  </td>
+                  <td style="color:#64748b;font-size:.84rem;">{{ plan.created_at|date:"d M Y" }}</td>
+                  <td style="text-align:right;">
+                    <div style="display:flex;gap:6px;justify-content:flex-end;">
+                      <a href="{% url 'admin-subscription-plan-edit' plan.pk %}"
+                         style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;font-size:.76rem;font-weight:600;background:rgba(79,142,247,.1);color:#4f8ef7;text-decoration:none;border:none;transition:all .18s ease;">
+                        <i class="fas fa-pen" style="font-size:.65rem;"></i> Edit
+                      </a>
+                      <a href="javascript:;" class="remove_record"
+                         data-url="{% url 'admin-subscription-plan-delete' plan.pk %}"
+                         style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;font-size:.76rem;font-weight:600;background:rgba(239,68,68,.08);color:#ef4444;text-decoration:none;border:none;transition:all .18s ease;">
+                        <i class="fas fa-trash-alt" style="font-size:.65rem;"></i> Delete
+                      </a>
+                    </div>
                   </td>
                 </tr>
                 {% empty %}
                 <tr>
-                  <td colspan="8" class="text-center text-muted py-3">No subscription plans yet. <a href="{% url 'admin-subscription-plan-add' %}">Add one now.</a></td>
+                  <td colspan="8" style="text-align:center;padding:48px 16px;">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+                      <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,rgba(79,142,247,.1),rgba(99,102,241,.1));display:flex;align-items:center;justify-content:center;">
+                        <i class="fas fa-tags" style="font-size:1.4rem;color:#4f8ef7;"></i>
+                      </div>
+                      <div style="font-weight:600;color:#334155;font-size:.9rem;">No subscription plans yet</div>
+                      <a href="{% url 'admin-subscription-plan-add' %}" style="color:#4f8ef7;font-weight:600;font-size:.84rem;">Create your first plan &rarr;</a>
+                    </div>
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>

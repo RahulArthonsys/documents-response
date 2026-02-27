@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4f8ef7">
   <title>{{configs.APP_NAME}}</title>
 
   <!-- Google Fonts: Inter + Source Sans Pro -->
@@ -32,15 +33,25 @@
   <link rel="stylesheet" href="{% static 'plugins/datatables-bs4/css/dataTables.bootstrap4.min.css' %}">
   <link rel="stylesheet" href="{% static 'plugins/datatables-responsive/css/responsive.bootstrap4.min.css' %}">
   <link rel="stylesheet" href="{% static 'plugins/datatables-buttons/css/buttons.bootstrap4.min.css' %}">
-<!-- sweetalert -->
+  <!-- sweetalert -->
   <link rel="stylesheet" href="{% static 'plugins/sweet-alert2/sweetalert2.css' %}">
   <link rel="stylesheet" href="{% static 'plugins/json-viewer/json-viewer.css' %}">
   <link rel="stylesheet" href="{% static 'admin-assets/css/admin-style.css' %}">
+
+  <!-- React 18 + Babel standalone for JSX -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
   <script>
-    // Apply dark mode immediately to prevent flash of light theme
-    if (localStorage.getItem('theme') === 'dark') {
-      document.documentElement.classList.add('dark-mode');
-    }
+    // Apply theme immediately to prevent flash — dark is default
+    (function(){
+      var t = localStorage.getItem('theme');
+      if (t !== 'light') {
+        document.documentElement.classList.add('dark-mode');
+      }
+    })();
   </script>
+  {% block extra_css %}{% endblock %}
 
 </head>

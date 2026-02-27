@@ -95,28 +95,962 @@
 
     var ajaxUrl = $('#list_page_url').val();
     var oTable = $('#datatable').DataTable({
-          "pageLength":10,
-          "serverSide": true,
-
-          "ordering": true,
-              columnDefs: [{
-              "width": "20%",
-              orderable: false,
-              targets: "no-sort"
-              }],
-          "language": {
-          "emptyTable": "No data available"
-           },
-          "order": [],
-          "ajax": { "url": ajaxUrl },
-          "scrollX": true,
-          "initComplete": function(settings, json){
-                $('#id_count').html(settings.json.recordsTotal);
-           },
-           "columnDefs": [{
-                "targets": [-1],
-                "orderable": false,
-                "className": 'text-right'
-            }],
+      "pageLength": 10,
+      "serverSide": true,
+      "ordering": true,
+      "language": { "emptyTable": "No data available" },
+      "order": [],
+      "ajax": { "url": ajaxUrl },
+      "scrollX": true,
+      "columns": [
+        { "data": "first_name", "name": "first_name" },
+        { "data": "last_name",  "name": "last_name" },
+        { "data": "email",      "name": "email" },
+        { "data": "is_active",  "name": "is_active",  "orderable": true },
+        { "data": "actions",    "name": "actions",     "orderable": false, "className": "text-right" }
+      ],
+      "initComplete": function(settings, json) {
+        $('#id_count').html(settings.json.recordsTotal);
+      }
     });
 </script>
+
+{% if user.is_authenticated %}
+{% url 'claire-assistant' as claire_url %}
+{% if request.path != claire_url %}
+<!-- ══════════════════════════════════════════════════════════════
+     CLAIRE CHAT WIDGET — inject user/CSRF data for JS
+     ══════════════════════════════════════════════════════════════ -->
+<script>
+window.claireWidgetData = {
+    isAuthenticated: true,
+    userId: {{ user.pk }},
+    userName: "{{ user.get_full_name|default:user.username|escapejs }}",
+    csrfToken: "{{ csrf_token }}",
+    askUrl: "{% url 'claire-ask' %}",
+    uploadUrl: "{% url 'claire-session-upload' %}",
+    historyUrl: "{% url 'claire-history' %}",
+    assistantUrl: "{% url 'claire-assistant' %}",
+};
+</script>
+
+<!-- marked.js for Markdown rendering in the widget -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<!-- DOMPurify for safe HTML -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+
+<!-- ── Widget HTML ── -->
+<div id="claireWidget">
+  <!-- Toggle button -->
+  <button id="claireToggleBtn" title="Chat with Claire" aria-label="Open Claire chat">
+    <i class="fas fa-robot" id="claireToggleIcon"></i>
+    <span class="claire-notif-dot" id="claireNotifDot" style="display:none;"></span>
+  </button>
+
+  <!-- Chat window -->
+  <div id="claireWindow" class="claire-window" style="display:none;" role="dialog" aria-label="Claire AI Chat">
+    <!-- Header -->
+    <div class="claire-header">
+      <div class="claire-header-info">
+        <div class="claire-avatar"><i class="fas fa-robot"></i></div>
+        <div>
+          <div class="claire-title">Claire</div>
+          <div class="claire-subtitle" id="claireStatus"><span class="claire-status-dot"></span> AI Assistant &middot; Online</div>
+        </div>
+      </div>
+      <div class="claire-header-btns">
+        <a href="{% url 'claire-assistant' %}" class="claire-hdr-btn" title="Open full chat" target="_self">
+          <i class="fas fa-external-link-alt"></i>
+        </a>
+        <button class="claire-hdr-btn" id="claireCloseBtn" title="Close" aria-label="Close chat">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="claire-messages" id="claireMessages" role="log" aria-live="polite">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- File upload status bar -->
+    <div class="claire-upload-bar" id="claireUploadBar" style="display:none;">
+      <i class="fas fa-paperclip"></i>
+      <span id="claireUploadName" class="claire-upload-name"></span>
+      <button id="claireRemoveFile" class="claire-remove-file" title="Remove file">&times;</button>
+    </div>
+    <div id="claireUploadProgress" style="display:none;padding:0 12px 6px;">
+      <div style="height:3px;background:#e9ecef;border-radius:2px;">
+        <div id="claireProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4f8ef7,#6366f1);border-radius:2px;transition:width 0.25s ease;"></div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="claire-footer">
+      <button id="claireAttachBtn" class="claire-attach-btn" title="Upload file">
+        <i class="fas fa-paperclip"></i>
+      </button>
+      <input type="file" id="claireFileInput" style="display:none;"
+             accept=".pdf,.txt,.doc,.docx,.pptx,.xlsx,.csv,.json,.xml,.png,.jpg,.jpeg">
+      <textarea id="claireInput" class="claire-input" rows="1"
+                placeholder="Ask Claire anything…" aria-label="Message input"></textarea>
+      <button id="claireSendBtn" class="claire-send-btn" title="Send" aria-label="Send message">
+        <i class="fas fa-paper-plane"></i>
+      </button>
+    </div>
+
+    <!-- Resize handle — top-left corner -->
+    <div id="claireResizeHandle" class="claire-resize-handle" title="Drag to resize">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 13L13 1M7 13L13 7M1 7L7 1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ── Widget CSS ── -->
+<style>
+/* ============================================================
+   NOVA CLAIRE WIDGET
+   ============================================================ */
+#claireWidget {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+}
+
+/* ── Toggle Button ── */
+#claireToggleBtn {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #4f8ef7 0%, #6366f1 100%);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(79,142,247,0.45), 0 2px 8px rgba(0,0,0,0.12);
+  color: #fff;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s ease;
+  position: relative;
+  will-change: transform;
+}
+#claireToggleBtn:hover {
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 12px 32px rgba(79,142,247,0.55), 0 4px 12px rgba(0,0,0,0.15);
+}
+#claireToggleBtn:active { transform: scale(0.95); }
+
+.claire-notif-dot {
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 11px; height: 11px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  animation: clairePulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+@keyframes clairePulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.4); opacity: 0.65; }
+}
+
+/* ── Chat Window ── */
+.claire-window {
+  position: absolute;
+  bottom: 72px;
+  right: 0;
+  width: 390px;
+  height: 560px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15,23,42,0.18), 0 4px 16px rgba(15,23,42,0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(226,232,240,0.8);
+  animation: claireSlideIn 0.3s cubic-bezier(.22,.68,0,1.2) both;
+  transform-origin: bottom right;
+}
+@keyframes claireSlideIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* ── Header ── */
+.claire-header {
+  background: linear-gradient(135deg, #4f8ef7 0%, #6366f1 100%);
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.claire-header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 120% -20%, rgba(255,255,255,0.18) 0%, transparent 60%);
+  pointer-events: none;
+}
+.claire-header-info { display: flex; align-items: center; gap: 11px; }
+.claire-avatar {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+.claire-title { font-weight: 700; font-size: 14px; color: #fff; letter-spacing: 0.1px; }
+.claire-subtitle {
+  font-size: 10.5px; color: rgba(255,255,255,0.82);
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 1px;
+}
+.claire-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74,222,128,0.8);
+  display: inline-block;
+}
+.claire-header-btns { display: flex; gap: 5px; position: relative; z-index: 1; }
+.claire-hdr-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  text-decoration: none;
+  transition: background 0.18s ease, transform 0.15s ease;
+}
+.claire-hdr-btn:hover {
+  background: rgba(255,255,255,0.28);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+/* ── Messages ── */
+.claire-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scroll-behavior: smooth;
+}
+.claire-messages::-webkit-scrollbar { width: 3px; }
+.claire-messages::-webkit-scrollbar-track { background: transparent; }
+.claire-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+/* ── Bubble Wraps ── */
+.claire-bubble-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  animation: claireBubbleIn 0.22s cubic-bezier(.22,.68,0,1.1) both;
+}
+@keyframes claireBubbleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.claire-bubble-wrap.user      { flex-direction: row-reverse; }
+.claire-bubble-wrap.assistant { flex-direction: row; }
+.claire-bubble-wrap.system    { justify-content: center; }
+
+.claire-bubble-icon {
+  width: 28px; height: 28px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0; margin-bottom: 2px;
+}
+.claire-bubble-wrap.user .claire-bubble-icon {
+  background: linear-gradient(135deg, #4f8ef7, #6366f1); color: #fff;
+}
+.claire-bubble-wrap.assistant .claire-bubble-icon {
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4); color: #fff;
+}
+
+.claire-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.claire-bubble-wrap.user .claire-bubble {
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+  box-shadow: 0 2px 12px rgba(79,142,247,0.28);
+}
+.claire-bubble-wrap.assistant .claire-bubble {
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 5px;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.06);
+}
+.claire-bubble-wrap.system .claire-bubble {
+  background: linear-gradient(135deg, #d1fae5, #dcfce7);
+  color: #166534;
+  font-size: 0.78rem;
+  border-radius: 10px;
+  max-width: 95%;
+  text-align: center;
+  padding: 7px 14px;
+  border: 1px solid rgba(74,222,128,0.25);
+}
+
+/* Markdown inside bubbles */
+.claire-bubble p { margin: 0 0 6px; }
+.claire-bubble p:last-child { margin-bottom: 0; }
+.claire-bubble ul, .claire-bubble ol { padding-left: 18px; margin: 4px 0; }
+.claire-bubble li { margin: 2px 0; }
+.claire-bubble pre {
+  background: #1e293b; color: #e2e8f0;
+  padding: 10px; border-radius: 8px;
+  overflow-x: auto; font-size: 0.78rem; margin: 8px 0;
+}
+.claire-bubble code {
+  background: rgba(99,102,241,0.1); color: #4f46e5;
+  padding: 1px 5px; border-radius: 4px; font-size: 0.82em;
+}
+.claire-bubble pre code { background: none; padding: 0; color: #e2e8f0; }
+.claire-bubble-wrap.user .claire-bubble code { background: rgba(255,255,255,0.2); color: #fff; }
+.claire-bubble strong { font-weight: 600; }
+.claire-bubble h1,.claire-bubble h2,.claire-bubble h3 { font-size: 1em; font-weight: 700; margin: 8px 0 4px; }
+.claire-bubble table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 0.82rem; }
+.claire-bubble table th, .claire-bubble table td { border: 1px solid #e2e8f0; padding: 5px 8px; }
+.claire-bubble table th { background: #f1f5f9; font-weight: 600; }
+
+/* ── Typing Indicator ── */
+.claire-typing {
+  display: flex; gap: 5px; align-items: center;
+  padding: 11px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px; border-bottom-left-radius: 5px;
+  width: fit-content;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.06);
+}
+.claire-typing span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #94a3b8; display: inline-block;
+  animation: claireTypingBounce 1.3s cubic-bezier(.4,0,.6,1) infinite;
+}
+.claire-typing span:nth-child(2) { animation-delay: 0.18s; }
+.claire-typing span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes claireTypingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Welcome Screen ── */
+.claire-welcome {
+  text-align: center; padding: 28px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  animation: claireBubbleIn 0.4s ease both;
+}
+.claire-welcome-icon {
+  width: 64px; height: 64px; border-radius: 20px;
+  background: linear-gradient(135deg, rgba(79,142,247,0.12), rgba(99,102,241,0.12));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 8px;
+}
+.claire-welcome-icon i { font-size: 30px; color: #4f8ef7; }
+.claire-welcome-name { font-weight: 700; color: #1e293b; font-size: 1rem; }
+.claire-welcome p { font-size: 0.83rem; color: #64748b; margin: 2px 0; line-height: 1.5; }
+.claire-welcome-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px;
+}
+.claire-chip {
+  padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;
+  background: rgba(79,142,247,0.09); color: #4f8ef7;
+  border: 1px solid rgba(79,142,247,0.2); cursor: default;
+}
+
+/* ── File Upload Bar ── */
+.claire-upload-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  background: linear-gradient(90deg, #f0fdf4, #dcfce7);
+  font-size: 0.79rem; color: #166534; flex-shrink: 0;
+  border-top: 1px solid rgba(74,222,128,0.2);
+}
+.claire-upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.claire-remove-file {
+  background: none; border: none; color: #ef4444;
+  font-size: 1.1rem; cursor: pointer; padding: 0 3px; line-height: 1;
+  transition: transform 0.15s;
+}
+.claire-remove-file:hover { transform: scale(1.2); }
+
+/* ── Footer Input ── */
+.claire-footer {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+  flex-shrink: 0;
+}
+.claire-attach-btn {
+  background: none; border: none; color: #94a3b8;
+  font-size: 15px; cursor: pointer; padding: 7px;
+  border-radius: 10px; flex-shrink: 0;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
+}
+.claire-attach-btn:hover {
+  background: rgba(79,142,247,0.1);
+  color: #4f8ef7;
+  transform: scale(1.1);
+}
+.claire-input {
+  flex: 1;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  max-height: 110px;
+  overflow-y: auto;
+  background: #f8fafc;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  font-family: inherit;
+  color: #334155;
+}
+.claire-input::placeholder { color: #94a3b8; }
+.claire-input:focus {
+  border-color: #4f8ef7;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(79,142,247,0.12);
+}
+.claire-send-btn {
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  color: #fff; border: none;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  font-size: 13px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(79,142,247,0.3);
+}
+.claire-send-btn:hover {
+  transform: scale(1.1) translateY(-1px);
+  box-shadow: 0 4px 16px rgba(79,142,247,0.45);
+}
+.claire-send-btn:active { transform: scale(0.95); }
+.claire-send-btn:disabled {
+  background: #e2e8f0; color: #94a3b8;
+  cursor: not-allowed; transform: none; box-shadow: none;
+}
+
+/* ── Resize Handle ── */
+.claire-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: nwse-resize;
+  color: rgba(255,255,255,0.7);
+  background: transparent;
+  border-radius: 0 0 8px 0;
+  transition: color 0.15s, background 0.15s;
+  z-index: 10;
+  user-select: none;
+}
+.claire-resize-handle:hover {
+  color: #fff;
+  background: rgba(0,0,0,0.12);
+}
+.claire-window.claire-resizing {
+  user-select: none;
+  transition: none !important;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .claire-window { width: calc(100vw - 20px); right: -4px; height: 480px; border-radius: 12px; }
+  #claireWidget { bottom: 16px; right: 12px; }
+  .claire-resize-handle { display: none; }
+}
+</style>
+
+<!-- ── Widget JavaScript ── -->
+<script>
+(function () {
+  'use strict';
+  if (window.__claireWidgetLoaded) return;
+  window.__claireWidgetLoaded = true;
+
+  var DATA = window.claireWidgetData || {};
+  var STORAGE_KEY = 'claire_widget_v1_u' + (DATA.userId || '0');
+
+  // ── State ────────────────────────────────────────────────────
+  var state = {
+    isOpen: false,
+    conversationId: null,
+    pendingFile: null,
+    isLoading: false,
+    messages: [],   // {role, content, time}
+  };
+
+  // ── DOM refs (loaded once window.onload fires)  ──────────────
+  var $widget, $window, $messages, $input, $sendBtn,
+      $attachBtn, $fileInput, $uploadBar, $uploadName,
+      $removeFile, $uploadProgress, $progressBar,
+      $toggleBtn, $closeBtn, $notifDot;
+
+  function $(id) { return document.getElementById(id); }
+
+  function init() {
+    $widget       = document.getElementById('claireWidget');
+    $window       = document.getElementById('claireWindow');
+    $messages     = document.getElementById('claireMessages');
+    $input        = document.getElementById('claireInput');
+    $sendBtn      = document.getElementById('claireSendBtn');
+    $attachBtn    = document.getElementById('claireAttachBtn');
+    $fileInput    = document.getElementById('claireFileInput');
+    $uploadBar    = document.getElementById('claireUploadBar');
+    $uploadName   = document.getElementById('claireUploadName');
+    $removeFile   = document.getElementById('claireRemoveFile');
+    $uploadProgress = document.getElementById('claireUploadProgress');
+    $progressBar  = document.getElementById('claireProgressBar');
+    $toggleBtn    = document.getElementById('claireToggleBtn');
+    $closeBtn     = document.getElementById('claireCloseBtn');
+    $notifDot     = document.getElementById('claireNotifDot');
+
+    // Restore state
+    loadState();
+
+    // Bind events
+    $toggleBtn.addEventListener('click', toggleWidget);
+    $closeBtn.addEventListener('click', closeWidget);
+    $sendBtn.addEventListener('click', sendMessage);
+    $input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    $input.addEventListener('input', autoResizeInput);
+    $attachBtn.addEventListener('click', function () { $fileInput.click(); });
+    $fileInput.addEventListener('change', onFileSelected);
+    $removeFile.addEventListener('click', removePendingFile);
+  }
+
+  // ── Widget open/close ────────────────────────────────────────
+  function toggleWidget() {
+    if (state.isOpen) { closeWidget(); } else { openWidget(); }
+  }
+
+  function openWidget() {
+    $window.style.display = 'flex';
+    state.isOpen = true;
+    $notifDot.style.display = 'none';
+    document.getElementById('claireToggleIcon').className = 'fas fa-times';
+
+    if (state.messages.length === 0) {
+      showWelcome();
+    } else {
+      renderAllMessages();
+    }
+    scrollBottom();
+    $input.focus();
+    saveState();
+  }
+
+  function closeWidget() {
+    $window.style.display = 'none';
+    state.isOpen = false;
+    document.getElementById('claireToggleIcon').className = 'fas fa-robot';
+    saveState();
+  }
+
+  // ── Welcome screen ───────────────────────────────────────────
+  function showWelcome() {
+    $messages.innerHTML = '<div class="claire-welcome">' +
+      '<i class="fas fa-robot"></i>' +
+      '<p class="claire-welcome-name">Hi, ' + (DATA.userName || 'there') + '!</p>' +
+      '<p>I\'m Claire, your AI assistant.</p>' +
+      '<p>Ask me anything or upload a file to get started.</p>' +
+      '</div>';
+  }
+
+  // ── Render messages ──────────────────────────────────────────
+  function renderAllMessages() {
+    $messages.innerHTML = '';
+    state.messages.forEach(function (m) { appendBubbleDOM(m.role, m.content); });
+  }
+
+  function appendBubbleDOM(role, content) {
+    var wrap = document.createElement('div');
+    wrap.className = 'claire-bubble-wrap ' + role;
+
+    if (role === 'system') {
+      wrap.innerHTML = '<div class="claire-bubble">' + renderMd(content) + '</div>';
+    } else {
+      var icon = role === 'user'
+        ? '<div class="claire-bubble-icon"><i class="fas fa-user"></i></div>'
+        : '<div class="claire-bubble-icon"><i class="fas fa-robot"></i></div>';
+      var bubble = '<div class="claire-bubble">' + (role === 'user' ? esc(content) : renderMd(content)) + '</div>';
+      wrap.innerHTML = (role === 'user') ? bubble + icon : icon + bubble;
+    }
+    $messages.appendChild(wrap);
+    return wrap;
+  }
+
+  function createStreamingBubble() {
+    var wrap = document.createElement('div');
+    wrap.className = 'claire-bubble-wrap assistant';
+    wrap.innerHTML =
+      '<div class="claire-bubble-icon"><i class="fas fa-robot"></i></div>' +
+      '<div class="claire-bubble" id="claireStreamBubble"></div>';
+    $messages.appendChild(wrap);
+    return document.getElementById('claireStreamBubble');
+  }
+
+  // ── Typing indicator ─────────────────────────────────────────
+  function showTyping() {
+    var wrap = document.createElement('div');
+    wrap.className = 'claire-bubble-wrap assistant';
+    wrap.id = 'claireTypingWrap';
+    wrap.innerHTML =
+      '<div class="claire-bubble-icon"><i class="fas fa-robot"></i></div>' +
+      '<div class="claire-typing"><span></span><span></span><span></span></div>';
+    $messages.appendChild(wrap);
+    scrollBottom();
+  }
+
+  function hideTyping() {
+    var el = document.getElementById('claireTypingWrap');
+    if (el) el.remove();
+  }
+
+  // ── Send message ─────────────────────────────────────────────
+  function sendMessage() {
+    var msg = $input.value.trim();
+    if ((!msg && !state.pendingFile) || state.isLoading) return;
+    $input.value = '';
+    autoResizeInput();
+    state.isLoading = true;
+    $sendBtn.disabled = true;
+
+    // Clear welcome screen
+    var welcome = $messages.querySelector('.claire-welcome');
+    if (welcome) welcome.remove();
+
+    if (state.pendingFile) {
+      var file = state.pendingFile;
+      doUpload(file).then(function () {
+        if (msg) { doSend(msg); }
+        else { state.isLoading = false; $sendBtn.disabled = false; }
+      }).catch(function () {
+        if (msg) { doSend(msg); }
+        else { state.isLoading = false; $sendBtn.disabled = false; }
+      });
+      return;
+    }
+    doSend(msg);
+  }
+
+  function doSend(msg) {
+    // Add user bubble
+    state.messages.push({ role: 'user', content: msg });
+    appendBubbleDOM('user', msg);
+    showTyping();
+    scrollBottom();
+
+    var fullContent = '';
+    var streamBubble = null;
+
+    fetch(DATA.askUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': DATA.csrfToken,
+      },
+      body: JSON.stringify({
+        message: msg,
+        conversation_id: state.conversationId,
+        stream: true,
+      }),
+    })
+    .then(function (res) {
+      hideTyping();
+      if (!res.ok) {
+        return res.json().then(function (d) {
+          addErrorBubble(d.error || 'Request failed');
+          finishSend();
+        });
+      }
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      function pump() {
+        return reader.read().then(function (result) {
+          if (result.done) { finishSend(); return; }
+          buffer += decoder.decode(result.value, { stream: true });
+          var lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line.startsWith('data: ')) continue;
+            try {
+              var data = JSON.parse(line.slice(6));
+              if (data.type === 'start') {
+                streamBubble = createStreamingBubble();
+              } else if (data.type === 'token') {
+                fullContent += data.content;
+                if (streamBubble) {
+                  streamBubble.innerHTML = renderMd(fullContent);
+                  scrollBottom();
+                }
+              } else if (data.type === 'done') {
+                state.conversationId = data.conversation_id || state.conversationId;
+                if (streamBubble) streamBubble.innerHTML = renderMd(fullContent);
+                state.messages.push({ role: 'assistant', content: fullContent });
+                finishSend();
+                saveState();
+                return;
+              }
+            } catch (e) { /* skip malformed chunks */ }
+          }
+          return pump();
+        });
+      }
+      return pump();
+    })
+    .catch(function () {
+      hideTyping();
+      addErrorBubble('Network error. Please try again.');
+      finishSend();
+    });
+  }
+
+  function finishSend() {
+    state.isLoading = false;
+    $sendBtn.disabled = false;
+    $input.focus();
+    scrollBottom();
+    saveState();
+  }
+
+  function addErrorBubble(text) {
+    appendBubbleDOM('system', '⚠️ ' + text);
+  }
+
+  // ── File upload ───────────────────────────────────────────────
+  function onFileSelected() {
+    if (!$fileInput.files.length) return;
+    var file = $fileInput.files[0];
+    state.pendingFile = file;
+    $uploadName.textContent = file.name;
+    $uploadBar.style.display = 'flex';
+  }
+
+  function removePendingFile() {
+    state.pendingFile = null;
+    $fileInput.value = '';
+    $uploadBar.style.display = 'none';
+  }
+
+  function doUpload(file) {
+    return new Promise(function (resolve, reject) {
+      $uploadProgress.style.display = 'block';
+      $progressBar.style.width = '0%';
+
+      var fd = new FormData();
+      fd.append('file', file);
+      if (state.conversationId) fd.append('conversation_id', state.conversationId);
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', DATA.uploadUrl);
+      xhr.setRequestHeader('X-CSRFToken', DATA.csrfToken);
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) $progressBar.style.width = Math.round(e.loaded / e.total * 100) + '%';
+      };
+      xhr.onload = function () {
+        $uploadProgress.style.display = 'none';
+        $uploadBar.style.display = 'none';
+        state.pendingFile = null;
+        $fileInput.value = '';
+
+        if (xhr.status === 200) {
+          var d = JSON.parse(xhr.responseText);
+          appendBubbleDOM('system', '📎 Uploaded <strong>' + esc(d.filename || file.name) + '</strong> (' + (d.chunks || 0) + ' chunks indexed)');
+          scrollBottom();
+          resolve(d);
+        } else {
+          var err = 'Upload failed';
+          try { err = JSON.parse(xhr.responseText).error || err; } catch (e) {}
+          addErrorBubble(err);
+          reject(err);
+        }
+      };
+      xhr.onerror = function () {
+        $uploadProgress.style.display = 'none';
+        reject('Network error');
+      };
+      xhr.send(fd);
+    });
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function scrollBottom() {
+    $messages.scrollTop = $messages.scrollHeight;
+  }
+
+  function autoResizeInput() {
+    $input.style.height = 'auto';
+    $input.style.height = Math.min($input.scrollHeight, 100) + 'px';
+  }
+
+  function renderMd(text) {
+    if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+      try { return DOMPurify.sanitize(marked.parse(text)); } catch (e) {}
+    }
+    var d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  function esc(text) {
+    var d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  // ── State persistence (sessionStorage) ───────────────────────
+  function saveState() {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        isOpen: state.isOpen,
+        conversationId: state.conversationId,
+        messages: state.messages.slice(-40),  // keep last 40 messages
+      }));
+    } catch (e) {}
+  }
+
+  function loadState() {
+    try {
+      var raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      state.conversationId = saved.conversationId || null;
+      state.messages = saved.messages || [];
+      if (saved.isOpen) { openWidget(); }
+    } catch (e) {}
+  }
+
+  // ── Resize (drag top-left handle) ─────────────────────────────
+  var RESIZE_KEY = 'claire_size_v1';
+  var DEFAULT_W = 380, DEFAULT_H = 540;
+  var MIN_W = 280, MIN_H = 320, MAX_W = 720, MAX_H = 860;
+
+  function loadWindowSize() {
+    try {
+      var raw = localStorage.getItem(RESIZE_KEY);
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s.w && s.h) applyWindowSize(s.w, s.h);
+    } catch (e) {}
+  }
+
+  function saveWindowSize(w, h) {
+    try { localStorage.setItem(RESIZE_KEY, JSON.stringify({ w: w, h: h })); } catch (e) {}
+  }
+
+  function applyWindowSize(w, h) {
+    var win = document.getElementById('claireWindow');
+    if (!win) return;
+    win.style.width  = w + 'px';
+    win.style.height = h + 'px';
+  }
+
+  function setupResize() {
+    var handle = document.getElementById('claireResizeHandle');
+    if (!handle) return;
+
+    var startX, startY, startW, startH;
+
+    function onMouseMove(e) {
+      e.preventDefault();
+      var dx = startX - e.clientX;   // dragging left  → wider
+      var dy = startY - e.clientY;   // dragging up    → taller
+      var newW = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
+      var newH = Math.min(MAX_H, Math.max(MIN_H, startH + dy));
+      applyWindowSize(newW, newH);
+    }
+
+    function onMouseUp(e) {
+      var win = document.getElementById('claireWindow');
+      if (win) {
+        win.classList.remove('claire-resizing');
+        saveWindowSize(parseInt(win.style.width), parseInt(win.style.height));
+      }
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onMouseUp);
+    }
+
+    function onTouchMove(e) {
+      if (e.touches.length) onMouseMove(e.touches[0]);
+    }
+
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      var win = document.getElementById('claireWindow');
+      if (!win) return;
+      win.classList.add('claire-resizing');
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = win.offsetWidth;
+      startH = win.offsetHeight;
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    handle.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      var win = document.getElementById('claireWindow');
+      if (!win || !e.touches.length) return;
+      var t = e.touches[0];
+      win.classList.add('claire-resizing');
+      startX = t.clientX;
+      startY = t.clientY;
+      startW = win.offsetWidth;
+      startH = win.offsetHeight;
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    }, { passive: false });
+  }
+
+  // ── Boot after DOM is ready ───────────────────────────────────
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { init(); loadWindowSize(); setupResize(); });
+  } else {
+    init(); loadWindowSize(); setupResize();
+  }
+})();
+</script>
+{% endif %}
+{% endif %}
+

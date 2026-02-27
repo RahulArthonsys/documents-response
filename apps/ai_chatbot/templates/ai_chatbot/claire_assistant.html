@@ -2,404 +2,71 @@
 {% load static %}
 
 {% block extra_css %}
-<!-- Markdown rendering -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
 <style>
-  /* ── Hide footer, prevent page scroll ── */
   .main-footer { display: none !important; }
   body, html { overflow: hidden !important; }
-
-  /* ── claire-page: fixed overlay covering content area ──
-     AdminLTE navbar  = 3.5rem + 1px ≈ 57px (top offset)
-     AdminLTE sidebar  = 250px wide (left offset), collapses to 4.6rem
-  */
-  .claire-page {
+  .nova-chat-page {
     position: fixed;
-    top: calc(3.5rem + 1px); /* below top navbar */
-    bottom: 0;
-    right: 0;
-    left: 250px;             /* default sidebar width */
+    top: calc(3.5rem + 1px);
+    bottom: 0; right: 0;
+    left: 250px;
     overflow: hidden;
     display: flex;
-    flex-direction: column;
-    background: #ecf0f4;
+    background: var(--nova-50, #f8fafc);
     z-index: 10;
-    transition: left 0.3s ease-in-out; /* match sidebar animation */
+    transition: left 0.3s ease-in-out;
   }
-  /* sidebar collapsed state */
-  body.sidebar-mini.sidebar-collapse .claire-page { left: 4.6rem; }
-
-  /* ── Content header — compact breadcrumb bar ── */
-  .claire-page .content-header {
-    flex-shrink: 0;
-    padding: 6px 15px;
-    margin-bottom: 0;
-    background: #ecf0f4;
-  }
-  .claire-page .content-header h1 { font-size: 1.25rem; margin: 0; }
-  .claire-page .content-header .breadcrumb { margin-bottom: 0; }
-
-  /* ── Section.content — fills rest of the space ── */
-  .claire-page section.content {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding: 0 12px 8px;
-  }
-  .claire-page section.content > .container-fluid {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    margin: 0;
-    max-width: 100%;
-  }
-  .claire-page section.content > .container-fluid > .row {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    flex-wrap: nowrap;
-    margin: 0 -6px;
-  }
-  .claire-page section.content > .container-fluid > .row > [class*="col-"] {
-    padding: 0 6px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* ── Sidebar column ── */
-  .sidebar-col {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .sidebar-col > .card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    margin-bottom: 0;
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .sidebar-col > .card > .card-header { flex-shrink: 0; }
-  .sidebar-col > .card > .card-body {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    padding: 8px;
-  }
-  .sidebar-col > .card > .card-footer { flex-shrink: 0; }
-
-  /* Conversation items */
-  .conversation-item { transition: background 0.15s; border-radius: 6px; }
-  .conversation-item:hover { background: #e9ecef; }
-  .conversation-item.active-conv { background: #007bff !important; color: #fff !important; }
-  .conversation-item.active-conv .text-muted,
-  .conversation-item.active-conv .font-weight-medium { color: #fff !important; }
-  .conversation-item.active-conv .btn-outline-danger {
-    color: #fff !important; border-color: rgba(255,255,255,0.5) !important;
-  }
-
-  /* ── Chat column ── */
-  .chat-col {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .chat-col > .card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    margin-bottom: 0;
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .chat-col > .card > .card-header { flex-shrink: 0; }
-  .chat-col > .card > .card-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    padding: 0;
-  }
-
-  /* ── Chat wrapper ── */
-  .chat-wrapper {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 0 12px 8px;
-  }
-  .chat-messages {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 6px;
-  }
-  .chat-input-bar { flex-shrink: 0; padding: 10px 0 4px; }
-  .file-upload-area { flex-shrink: 0; }
-  .file-progress { flex-shrink: 0; display: none; margin-top: 4px; }
-
-  /* ── Bubbles: user RIGHT, assistant LEFT ── */
-  .chat-bubble {
-    max-width: 75%;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  .chat-bubble.user   { flex-direction: row-reverse; margin-left: auto; margin-right: 0; }
-  .chat-bubble.assistant { flex-direction: row; margin-right: auto; margin-left: 0; }
-  .chat-bubble.system { max-width: 100%; justify-content: center; }
-
-  .chat-bubble .bubble-content {
-    padding: 10px 14px;
-    border-radius: 18px;
-    font-size: 0.92rem;
-    line-height: 1.6;
-    word-break: break-word;
-  }
-  .chat-bubble .bubble-content p { margin-bottom: 0.4rem; }
-  .chat-bubble .bubble-content p:last-child { margin-bottom: 0; }
-  .chat-bubble .bubble-content pre {
-    background: #1e1e1e; color: #d4d4d4;
-    padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem;
-  }
-  .chat-bubble .bubble-content code {
-    background: #e9ecef; padding: 1px 4px; border-radius: 3px; font-size: 0.88em;
-  }
-  .chat-bubble .bubble-content pre code { background: none; padding: 0; }
-  .chat-bubble .bubble-content table {
-    width: 100%; border-collapse: collapse; margin: 8px 0;
-  }
-  .chat-bubble .bubble-content table th,
-  .chat-bubble .bubble-content table td {
-    border: 1px solid #dee2e6; padding: 6px 8px; font-size: 0.85rem;
-  }
-  .chat-bubble .bubble-content table th { background: #f0f0f0; }
-
-  .chat-bubble.user .bubble-content {
-    background: #007bff; color: #fff; border-bottom-right-radius: 4px;
-  }
-  .chat-bubble.user .bubble-content code { background: rgba(255,255,255,0.2); color: #fff; }
-  .chat-bubble.assistant .bubble-content {
-    background: #fff; color: #333; border: 1px solid #dee2e6; border-bottom-left-radius: 4px;
-  }
-  .chat-bubble.system .bubble-content {
-    background: #e8f5e9; color: #2e7d32; font-size: 0.82rem; border-radius: 8px;
-  }
-
-  .chat-bubble .avatar {
-    width: 32px; height: 32px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; flex-shrink: 0;
-  }
-  .chat-bubble.user .avatar { background: #007bff; color: #fff; }
-  .chat-bubble.assistant .avatar { background: #17a2b8; color: #fff; }
-
-  .file-upload-area {
-    display: flex; align-items: center; gap: 6px; padding: 4px 0;
-  }
-  .file-upload-area .file-info {
-    font-size: 0.82rem; color: #666; display: flex; align-items: center; gap: 4px;
-  }
-  .file-upload-area .file-info .remove-file { color: #dc3545; cursor: pointer; }
-  .typing-indicator span {
-    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-    background: #aaa; margin: 0 2px; animation: bounce 1.2s infinite;
-  }
-  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  body.sidebar-mini.sidebar-collapse .nova-chat-page { left: 4.6rem; }
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="claire-page">
-<!-- Content Header -->
-<div class="content-header">
-  <div class="container-fluid">
-    <div class="row mb-2">
-      <div class="col-sm-6">
-        <h1 class="m-0 text-dark">
-          <i class="fas fa-robot text-info mr-2"></i>ArthaCore AI
-        </h1>
-      </div>
-      <div class="col-sm-6">
-        <ol class="breadcrumb float-sm-right">
-          <li class="breadcrumb-item"><a href="{% url 'admin-dashboard' %}">Dashboard</a></li>
-          <li class="breadcrumb-item active">ArthaCore AI</li>
-        </ol>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Inject Django data for React -->
+<script>
+window.__CLAIRE__ = {
+  conversationId: {{ conversation.pk }},
+  currentConvId: {{ current_conv_id|default:"0" }},
+  conversationTitle: "{{ conversation.title|default:'New Conversation'|escapejs }}",
+  csrfToken: "{{ csrf_token }}",
+  urls: {
+    ask: "{% url 'claire-ask' %}",
+    upload: "{% url 'claire-session-upload' %}",
+    assistant: "{% url 'claire-assistant' %}",
+    history: "{% url 'claire-history' %}",
+    deleteConv: "{% url 'claire-delete-conversation' %}",
+    clearHistory: "{% url 'claire-clear-history' %}",
+    dashboard: "{% url 'admin-dashboard' %}"
+  },
+  groupedConversations: [
+    {% for date_key, convs in grouped_conversations.items %}
+    {
+      label: "{% if date_key == today %}Today{% elif date_key == yesterday %}Yesterday{% else %}{{ date_key|date:'M d, Y' }}{% endif %}",
+      conversations: [
+        {% for conv in convs %}
+        {
+          id: {{ conv.pk }},
+          title: "{{ conv.title|default:'New Chat'|truncatechars:28|escapejs }}",
+          messageCount: {{ conv.message_count }},
+          isActive: {% if conv.pk == current_conv_id %}true{% else %}false{% endif %}
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  initialMessages: [
+    {% for msg in chat_messages %}
+    {
+      role: "{{ msg.role }}",
+      content: "{{ msg.content|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ]
+};
+</script>
 
-<section class="content">
-  <div class="container-fluid">
-    <div class="row">
-
-      <!-- Conversation Sidebar -->
-      <div class="col-md-3 sidebar-col">
-        <div class="card card-outline card-info">
-          <div class="card-header d-flex align-items-center justify-content-between py-2">
-            <h3 class="card-title mb-0"><i class="fas fa-comments mr-1"></i> Chats</h3>
-            <div>
-              <button class="btn btn-sm btn-primary" id="newChatBtn" title="Start New Chat">
-                <i class="fas fa-plus"></i>
-              </button>
-              <button class="btn btn-sm btn-danger ml-1" id="clearHistoryBtn" title="Clear All History">
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          </div>
-          <div class="card-body p-2">
-            {% for date_key, convs in grouped_conversations.items %}
-            <div class="mb-3">
-              <small class="text-muted font-weight-bold text-uppercase px-1">
-                {% if date_key == today %}Today
-                {% elif date_key == yesterday %}Yesterday
-                {% else %}{{ date_key|date:"M d, Y" }}
-                {% endif %}
-              </small>
-              {% for conv in convs %}
-              <div class="conversation-item d-flex align-items-center justify-content-between px-2 py-1 rounded mb-1 {% if conv.pk == current_conv_id %}active-conv{% endif %}"
-                   data-conv-id="{{ conv.pk }}" style="cursor:pointer;">
-                <div class="flex-grow-1 text-truncate" style="min-width:0;"
-                     onclick="window.location.href='{% url 'claire-assistant' %}?conv_id={{ conv.pk }}'">
-                  <span class="font-weight-medium text-sm">{{ conv.title|default:"New Chat"|truncatechars:28 }}</span>
-                  <br>
-                  <small class="text-muted">
-                    <span class="message-count-display">{{ conv.message_count }}</span> msgs
-                  </small>
-                </div>
-                <button class="btn btn-xs btn-outline-danger ml-1 delete-conv-btn"
-                        data-conv-id="{{ conv.pk }}" title="Delete"
-                        onclick="event.stopPropagation(); deleteConversation({{ conv.pk }});">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              {% endfor %}
-            </div>
-            {% empty %}
-            <p class="text-muted text-sm text-center mt-3">No conversations yet.</p>
-            {% endfor %}
-          </div>
-          <!-- Midnight countdown (hidden by default) -->
-          <div class="card-footer py-1 text-center" id="midnightCountdown" style="display:none;">
-            <small class="text-info">
-              <i class="fas fa-sync-alt"></i> <span id="countdownText">Calculating...</span>
-            </small>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chat Panel -->
-      <div class="col-md-9 chat-col">
-        <div class="card card-primary card-outline direct-chat direct-chat-primary">
-          <div class="card-header d-flex align-items-center justify-content-between">
-            <h3 class="card-title mb-0">
-              <i class="fas fa-comment-dots mr-2"></i>
-              {{ conversation.title|default:"New Conversation" }}
-            </h3>
-            <div class="ml-auto">
-              <a href="{% url 'claire-history' %}" class="btn btn-warning btn-sm font-weight-bold shadow-sm">
-                <i class="fas fa-history mr-1"></i> History
-              </a>
-            </div>
-          </div>
-          <div class="card-body p-0">
-            <div class="chat-wrapper px-3 py-2">
-              <!-- Messages -->
-              <div class="chat-messages" id="chatMessages">
-                {% if not chat_messages %}
-                <div class="text-center text-muted mt-4" id="emptyState">
-                  <i class="fas fa-robot fa-3x mb-3 text-info"></i>
-                  <p class="font-weight-bold">Hello! I'm ArthaCore AI, your AI assistant.</p>
-                  <p>Ask me anything about your knowledge base documents, or upload a file to analyze.</p>
-                </div>
-                {% endif %}
-                {% for msg in chat_messages %}
-                <div class="chat-bubble {{ msg.role }}">
-                  {% if msg.role != 'system' %}
-                  <div class="avatar">
-                    {% if msg.role == 'user' %}
-                      <i class="fas fa-user"></i>
-                    {% else %}
-                      <i class="fas fa-robot"></i>
-                    {% endif %}
-                  </div>
-                  {% endif %}
-                  <div class="bubble-content">{% if msg.role == 'assistant' %}{{ msg.content }}{% else %}{{ msg.content }}{% endif %}</div>
-                </div>
-                {% endfor %}
-                <!-- Typing indicator (hidden by default) -->
-                <div class="chat-bubble assistant" id="typingIndicator" style="display:none;">
-                  <div class="avatar"><i class="fas fa-robot"></i></div>
-                  <div class="bubble-content">
-                    <div class="typing-indicator">
-                      <span></span><span></span><span></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- File upload status -->
-              <div class="file-upload-area" id="fileUploadArea" style="display:none;">
-                <div class="file-info" id="fileInfo">
-                  <i class="fas fa-paperclip"></i>
-                  <span id="fileName"></span>
-                  <span class="remove-file" id="removeFile" title="Remove file">&times;</span>
-                </div>
-              </div>
-              <div class="file-progress" id="fileProgress">
-                <div class="progress progress-sm">
-                  <div class="progress-bar bg-success progress-bar-striped progress-bar-animated"
-                       id="fileProgressBar" style="width: 0%"></div>
-                </div>
-                <small class="text-muted" id="fileProgressText">Uploading...</small>
-              </div>
-
-              <!-- Input -->
-              <div class="chat-input-bar">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <button class="btn btn-outline-secondary" id="attachBtn" title="Upload a file to this conversation">
-                      <i class="fas fa-paperclip"></i>
-                    </button>
-                  </div>
-                  <input type="text" id="chatInput" class="form-control"
-                         placeholder="Type your message…" autocomplete="off">
-                  <div class="input-group-append">
-                    <button class="btn btn-primary" id="sendBtn">
-                      <i class="fas fa-paper-plane"></i>
-                    </button>
-                  </div>
-                </div>
-                <input type="file" id="fileInput" style="display:none"
-                       accept=".pdf,.txt,.doc,.docx,.pptx,.xlsx,.csv,.json,.xml">
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-
-    </div>
-  </div>
-</section>
-</div><!-- /.claire-page -->
+<div id="nova-claire-root"></div>
 
 <!-- Markdown libs -->
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
@@ -410,478 +77,626 @@
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 
-<script>
-(function () {
-  var chatMessages = document.getElementById('chatMessages');
-  var chatInput = document.getElementById('chatInput');
-  var sendBtn = document.getElementById('sendBtn');
-  var typingIndicator = document.getElementById('typingIndicator');
-  var attachBtn = document.getElementById('attachBtn');
-  var fileInput = document.getElementById('fileInput');
-  var fileUploadArea = document.getElementById('fileUploadArea');
-  var fileNameEl = document.getElementById('fileName');
-  var removeFileBtn = document.getElementById('removeFile');
-  var fileProgress = document.getElementById('fileProgress');
-  var fileProgressBar = document.getElementById('fileProgressBar');
-  var fileProgressText = document.getElementById('fileProgressText');
-  var emptyState = document.getElementById('emptyState');
-  var currentConversationId = {{ conversation.pk }};
-  var pendingFile = null;
+<!-- React Claire App -->
+<script type="text/babel">
+{% verbatim %}
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const C = window.__CLAIRE__;
 
-  // Configure marked for markdown rendering
+/* ── Markdown helpers ── */
+function initMarked() {
   if (typeof marked !== 'undefined') {
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      highlight: function(code, lang) {
+    marked.setOptions({ breaks: true, gfm: true,
+      highlight: (code, lang) => {
         if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
-          try { return hljs.highlight(code, {language: lang}).value; } catch(e) {}
+          try { return hljs.highlight(code, { language: lang }).value; } catch(e) {}
         }
         return code;
       }
     });
   }
+}
+initMarked();
 
-  function renderMarkdown(text) {
-    if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
-      try {
-        return DOMPurify.sanitize(marked.parse(text));
-      } catch(e) {
-        return escapeHtml(text);
-      }
+function renderMarkdown(text) {
+  if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+    try { return DOMPurify.sanitize(marked.parse(text)); } catch(e) {}
+  }
+  const d = document.createElement('div'); d.textContent = text; return d.innerHTML;
+}
+
+/* ── Conversation Sidebar ── */
+function ChatSidebar({ groups, onDelete, onNewChat, onClearHistory, countdown }) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return groups;
+    const q = search.toLowerCase();
+    return groups.map(g => ({
+      ...g,
+      conversations: g.conversations.filter(c => c.title.toLowerCase().includes(q))
+    })).filter(g => g.conversations.length > 0);
+  }, [groups, search]);
+
+  return (
+    <div className="nova-chat-sidebar">
+      <div className="nova-chat-sidebar-header">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <i className="fas fa-comments" style={{ color: 'var(--nova-primary)', fontSize: '1rem' }}></i>
+            <span>Chats</span>
+          </h3>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={onNewChat} title="New Chat"
+              style={{
+                width: '32px', height: '32px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                background: 'linear-gradient(135deg, #4f8ef7, #6366f1)', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.75rem', boxShadow: '0 2px 8px rgba(79,142,247,0.3)',
+                transition: 'all 0.2s ease'
+              }}>
+              <i className="fas fa-plus"></i>
+            </button>
+            <button onClick={onClearHistory} title="Clear All"
+              style={{
+                width: '32px', height: '32px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.72rem', transition: 'all 0.2s ease'
+              }}>
+              <i className="fas fa-trash-alt"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="nova-chat-sidebar-search">
+        <i className="fas fa-search" style={{ position: 'absolute', left: '28px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.75rem', pointerEvents: 'none' }}></i>
+        <input type="text" placeholder="Search chats..." value={search}
+          onChange={e => setSearch(e.target.value)} />
+      </div>
+      <div className="nova-chat-list">
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
+            <i className="fas fa-inbox" style={{ fontSize: '1.6rem', marginBottom: '10px', display: 'block' }}></i>
+            <span style={{ fontSize: '0.82rem' }}>No conversations yet.</span>
+          </div>
+        ) : filtered.map((group, gi) => (
+          <div key={gi}>
+            <div style={{
+              fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8',
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+              padding: '12px 16px 4px', userSelect: 'none'
+            }}>{group.label}</div>
+            {group.conversations.map(conv => (
+              <div key={conv.id}
+                className={`nova-chat-item ${conv.isActive ? 'active' : ''}`}
+                onClick={() => window.location.href = `${C.urls.assistant}?conv_id=${conv.id}`}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap',
+                    overflow: 'hidden', textOverflow: 'ellipsis' }}>{conv.title}</div>
+                  <div style={{ fontSize: '0.72rem', opacity: 0.6, marginTop: '2px' }}>
+                    {conv.messageCount} messages
+                  </div>
+                </div>
+                <button className="btn btn-xs" title="Delete"
+                  onClick={e => { e.stopPropagation(); onDelete(conv.id); }}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: conv.isActive ? 'rgba(255,255,255,0.6)' : '#ef4444',
+                    padding: '4px 6px', borderRadius: '6px', flexShrink: 0
+                  }}>
+                  <i className="fas fa-times" style={{ fontSize: '0.7rem' }}></i>
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      {countdown && (
+        <div style={{
+          padding: '8px 16px', textAlign: 'center', borderTop: '1px solid var(--nova-200, #e2e8f0)',
+          fontSize: '0.75rem', color: 'var(--nova-primary)'
+        }}>
+          <i className="fas fa-sync-alt" style={{ marginRight: '4px' }}></i>{countdown}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Chat Bubble ── */
+function ChatBubble({ role, content }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && (role === 'assistant' || role === 'system')) {
+      ref.current.innerHTML = renderMarkdown(content);
     }
-    return escapeHtml(text);
+  }, [content, role]);
+
+  if (role === 'system') {
+    return (
+      <div className="nova-bubble-wrap system">
+        <div className="nova-bubble system"><div ref={ref}></div></div>
+      </div>
+    );
   }
 
-  function escapeHtml(text) {
-    var d = document.createElement('div');
-    d.textContent = text;
-    return d.innerHTML;
-  }
+  return (
+    <div className={`nova-bubble-wrap ${role}`}>
+      <div className="nova-bubble-avatar">
+        <i className={`fas fa-${role === 'user' ? 'user' : 'robot'}`}></i>
+      </div>
+      <div className={`nova-bubble ${role}`}>
+        {role === 'assistant' ? <div ref={ref}></div> : content}
+      </div>
+    </div>
+  );
+}
+
+/* ── Typing Indicator ── */
+function TypingIndicator() {
+  return (
+    <div className="nova-bubble-wrap assistant">
+      <div className="nova-bubble-avatar"><i className="fas fa-robot"></i></div>
+      <div className="nova-bubble assistant">
+        <div className="nova-typing"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Empty State — Premium Hero ── */
+function EmptyState() {
+  const suggestions = [
+    { icon: 'fas fa-search', text: 'Search my knowledge base', color: '#4f8ef7', bg: 'rgba(79,142,247,0.08)' },
+    { icon: 'fas fa-file-alt', text: 'Summarize a document', color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)' },
+    { icon: 'fas fa-chart-line', text: 'Analyze uploaded data', color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)' },
+    { icon: 'fas fa-lightbulb', text: 'Help me brainstorm', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+  ];
+
+  return (
+    <div className="nova-chat-empty">
+      {/* Animated gradient orb */}
+      <div className="nova-hero-orb">
+        <div className="nova-hero-orb-inner">
+          <i className="fas fa-robot" style={{ fontSize: '2.2rem' }}></i>
+        </div>
+        <div className="nova-hero-orb-ring"></div>
+        <div className="nova-hero-orb-ring" style={{ animationDelay: '0.5s', width: '130px', height: '130px' }}></div>
+      </div>
+
+      <h2 style={{ fontWeight: 800, fontSize: '1.8rem', margin: '28px 0 6px', letterSpacing: '-0.5px' }}
+        className="nova-empty-title">Hello, I'm Claire</h2>
+      <p style={{ maxWidth: '440px', lineHeight: 1.7, margin: '0 0 32px' }}
+        className="nova-empty-subtitle">
+        Your intelligent AI assistant. I can search your knowledge base,
+        analyze documents, and help you find answers instantly.
+      </p>
+
+      {/* Suggestion cards grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px',
+        maxWidth: '480px', width: '100%'
+      }}>
+        {suggestions.map((s, i) => (
+          <div key={i} className="nova-suggestion-card" style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '14px 16px', borderRadius: '18px',
+            background: s.bg, cursor: 'pointer',
+            transition: 'all 0.2s ease', border: '1px solid transparent',
+            animationDelay: `${0.1 + i * 0.08}s`
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = s.color + '33'; e.currentTarget.style.boxShadow = `0 4px 16px ${s.color}20`; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.boxShadow = 'none'; }}
+          >
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '12px',
+              background: s.color + '18', color: s.color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.85rem', flexShrink: 0
+            }}>
+              <i className={s.icon}></i>
+            </div>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: s.color }}>{s.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Main Claire App
+   ══════════════════════════════════════════════════════════ */
+function ClaireApp() {
+  const [messages, setMessages] = useState(() =>
+    C.initialMessages.map((m, i) => ({ id: i, ...m }))
+  );
+  const [isTyping, setIsTyping] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [inputVal, setInputVal] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null); // null | { name, pct }
+  const [countdown, setCountdown] = useState(null);
+  const [groups, setGroups] = useState(C.groupedConversations);
+  const convIdRef = useRef(C.conversationId);
+  const messagesEndRef = useRef(null);
+  const chatAreaRef = useRef(null);
+  const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const streamContentRef = useRef('');
+  const nextIdRef = useRef(C.initialMessages.length);
 
   function scrollToBottom() {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+    }
   }
 
-  function removeEmptyState() {
-    if (emptyState) { emptyState.remove(); emptyState = null; }
-  }
+  useEffect(() => { scrollToBottom(); }, [messages, isTyping]);
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
-  function appendBubble(role, content, isHtml) {
-    removeEmptyState();
-    var bubble = document.createElement('div');
-    bubble.className = 'chat-bubble ' + role;
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      const ta = inputRef.current;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 168) + 'px';
+    }
+  }, [inputVal]);
 
-    if (role === 'system') {
-      bubble.innerHTML = '<div class="bubble-content">' + renderMarkdown(content) + '</div>';
-    } else {
-      var avatarIcon = role === 'user' ? 'user' : 'robot';
-      bubble.innerHTML =
-        '<div class="avatar"><i class="fas fa-' + avatarIcon + '"></i></div>' +
-        '<div class="bubble-content"></div>';
-      if (role === 'assistant' || isHtml) {
-        bubble.querySelector('.bubble-content').innerHTML = renderMarkdown(content);
-      } else {
-        bubble.querySelector('.bubble-content').textContent = content;
+  /* ── Midnight countdown ── */
+  useEffect(() => {
+    function getMsUntilMidnight() {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      return midnight.getTime() - now.getTime();
+    }
+    function formatTime(ms) {
+      const s = Math.floor(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (h > 0) return `${h}h ${m}m ${sec}s`;
+      if (m > 0) return `${m}m ${sec}s`;
+      return `${sec}s`;
+    }
+    function check() {
+      const ms = getMsUntilMidnight();
+      if (ms <= 300000) setCountdown(`Fresh chat in ${formatTime(ms)}`);
+      if (ms <= 1000) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({ title: 'New Day, Fresh Chat!',
+            text: "It's midnight — starting a fresh conversation.",
+            icon: 'info', timer: 3000, showConfirmButton: false
+          }).then(() => { window.location.href = C.urls.assistant; });
+        } else { window.location.href = C.urls.assistant; }
+        return;
       }
+      setTimeout(check, ms <= 60000 ? 1000 : 60000);
     }
-    chatMessages.insertBefore(bubble, typingIndicator);
-    scrollToBottom();
-    return bubble;
+    check();
+  }, []);
+
+  /* ── Helpers ── */
+  function addMessage(role, content) {
+    const id = nextIdRef.current++;
+    setMessages(prev => [...prev, { id, role, content }]);
+    return id;
   }
 
-  function createStreamBubble() {
-    removeEmptyState();
-    var bubble = document.createElement('div');
-    bubble.className = 'chat-bubble assistant';
-    bubble.innerHTML =
-      '<div class="avatar"><i class="fas fa-robot"></i></div>' +
-      '<div class="bubble-content"></div>';
-    chatMessages.insertBefore(bubble, typingIndicator);
-    scrollToBottom();
-    return bubble;
+  function updateMessage(id, content) {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, content } : m));
   }
 
-  // File upload handling
-  attachBtn.addEventListener('click', function() { fileInput.click(); });
-
-  fileInput.addEventListener('change', function() {
-    if (fileInput.files.length > 0) {
-      pendingFile = fileInput.files[0];
-      fileNameEl.textContent = pendingFile.name;
-      fileUploadArea.style.display = 'flex';
+  /* ── File Upload ── */
+  function handleFileSelect(e) {
+    if (e.target.files.length > 0) {
+      setPendingFile(e.target.files[0]);
     }
-  });
+  }
 
-  removeFileBtn.addEventListener('click', function() {
-    pendingFile = null;
-    fileInput.value = '';
-    fileUploadArea.style.display = 'none';
-  });
+  function removePendingFile() {
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
 
   function uploadFile(file) {
-    return new Promise(function(resolve, reject) {
-      fileProgress.style.display = 'block';
-      fileProgressBar.style.width = '0%';
-      fileProgressText.textContent = 'Uploading ' + file.name + '...';
-
-      var formData = new FormData();
+    return new Promise((resolve, reject) => {
+      setUploadProgress({ name: file.name, pct: 0 });
+      const formData = new FormData();
       formData.append('file', file);
-      formData.append('conversation_id', currentConversationId);
+      formData.append('conversation_id', convIdRef.current);
 
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', '{% url "claire-session-upload" %}');
-
-      xhr.upload.onprogress = function(e) {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', C.urls.upload);
+      xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          var pct = Math.round((e.loaded / e.total) * 100);
-          fileProgressBar.style.width = pct + '%';
-          fileProgressText.textContent = 'Uploading ' + file.name + '... ' + pct + '%';
+          setUploadProgress({ name: file.name, pct: Math.round((e.loaded / e.total) * 100) });
         }
       };
-
-      xhr.onload = function() {
-        fileProgress.style.display = 'none';
-        fileUploadArea.style.display = 'none';
-        pendingFile = null;
-        fileInput.value = '';
-
+      xhr.onload = () => {
+        setUploadProgress(null);
+        setPendingFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         if (xhr.status === 200) {
-          var data = JSON.parse(xhr.responseText);
-          // Add system message about the upload
-          appendBubble('system', '📎 File uploaded: **' + data.filename + '** (' + data.chunks + ' chunks indexed)');
+          const data = JSON.parse(xhr.responseText);
+          addMessage('system', `📎 File uploaded: **${data.filename}** (${data.chunks} chunks indexed)`);
           resolve(data);
         } else {
-          var err = 'Upload failed';
+          let err = 'Upload failed';
           try { err = JSON.parse(xhr.responseText).error || err; } catch(e) {}
-          appendBubble('system', '⚠️ ' + err);
+          addMessage('system', `⚠️ ${err}`);
           reject(err);
         }
       };
-
-      xhr.onerror = function() {
-        fileProgress.style.display = 'none';
-        reject('Network error');
-      };
-
+      xhr.onerror = () => { setUploadProgress(null); reject('Network error'); };
       xhr.send(formData);
     });
   }
 
-  function getFileIcon(filename) {
-    var ext = filename.split('.').pop().toLowerCase();
-    var iconMap = {
-      'pdf':  'fa-file-pdf icon-pdf',
-      'doc':  'fa-file-word icon-word',
-      'docx': 'fa-file-word icon-word',
-      'xls':  'fa-file-excel icon-excel',
-      'xlsx': 'fa-file-excel icon-excel',
-      'ppt':  'fa-file-powerpoint icon-ppt',
-      'pptx': 'fa-file-powerpoint icon-ppt',
-      'csv':  'fa-file-csv icon-csv',
-      'json': 'fa-file-code icon-code',
-      'xml':  'fa-file-code icon-code',
-      'txt':  'fa-file-alt icon-text',
-      'md':   'fa-file-alt icon-text',
-      'jpg':  'fa-file-image icon-image',
-      'jpeg': 'fa-file-image icon-image',
-      'png':  'fa-file-image icon-image',
-      'gif':  'fa-file-image icon-image'
-    };
-    return iconMap[ext] || 'fa-file icon-text';
-  }
-
-  function sendMessage() {
-    var msg = chatInput.value.trim();
-    if (!msg && !pendingFile) return;
-    chatInput.value = '';
-    sendBtn.disabled = true;
-
-    // Handle file upload first
-    if (pendingFile) {
-      var fileToUpload = pendingFile;
-      uploadFile(fileToUpload).then(function() {
-        if (msg) { doSendText(msg); }
-        else { sendBtn.disabled = false; chatInput.focus(); }
-      }).catch(function() {
-        if (msg) { doSendText(msg); }
-        else { sendBtn.disabled = false; chatInput.focus(); }
-      });
-      return;
-    }
-
-    doSendText(msg);
-  }
-
+  /* ── SSE Send Message ── */
   function doSendText(msg) {
-    appendBubble('user', msg);
-    typingIndicator.style.display = 'flex';
-    scrollToBottom();
+    addMessage('user', msg);
+    setIsTyping(true);
+    streamContentRef.current = '';
+    let streamMsgId = null;
 
-    // Use SSE streaming
-    var streamBubble = null;
-    var fullContent = '';
-
-    fetch('{% url "claire-ask" %}', {
+    fetch(C.urls.ask, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': '{{ csrf_token }}'
-      },
-      body: JSON.stringify({
-        message: msg,
-        conversation_id: currentConversationId,
-        stream: true
-      })
-    }).then(function(response) {
-      typingIndicator.style.display = 'none';
-
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': C.csrfToken },
+      body: JSON.stringify({ message: msg, conversation_id: convIdRef.current, stream: true })
+    }).then(response => {
+      setIsTyping(false);
       if (!response.ok) {
-        return response.json().then(function(d) {
-          appendBubble('assistant', 'Error: ' + (d.error || 'Unknown error'));
-          sendBtn.disabled = false;
-          chatInput.focus();
+        return response.json().then(d => {
+          addMessage('assistant', 'Error: ' + (d.error || 'Unknown error'));
+          setIsSending(false);
+          if (inputRef.current) inputRef.current.focus();
         });
       }
 
-      var reader = response.body.getReader();
-      var decoder = new TextDecoder();
-      var buffer = '';
+      // Create the stream bubble
+      streamMsgId = nextIdRef.current++;
+      setMessages(prev => [...prev, { id: streamMsgId, role: 'assistant', content: '' }]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
       function processStream() {
-        return reader.read().then(function(result) {
+        return reader.read().then(result => {
           if (result.done) {
-            if (!streamBubble && fullContent) {
-              appendBubble('assistant', fullContent);
-            } else if (streamBubble) {
-              streamBubble.querySelector('.bubble-content').innerHTML = renderMarkdown(fullContent);
+            if (streamContentRef.current) {
+              updateMessage(streamMsgId, streamContentRef.current);
             }
-            sendBtn.disabled = false;
-            chatInput.focus();
+            setIsSending(false);
+            if (inputRef.current) inputRef.current.focus();
             return;
           }
 
-          buffer += decoder.decode(result.value, {stream: true});
-          var lines = buffer.split('\n');
+          buffer += decoder.decode(result.value, { stream: true });
+          const lines = buffer.split('\n');
           buffer = lines.pop();
 
-          for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line.startsWith('data: ')) continue;
-            var jsonStr = line.substring(6);
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
             try {
-              var data = JSON.parse(jsonStr);
-              if (data.type === 'start') {
-                streamBubble = createStreamBubble();
-              } else if (data.type === 'token') {
-                fullContent += data.content;
-                if (streamBubble) {
-                  streamBubble.querySelector('.bubble-content').innerHTML = renderMarkdown(fullContent);
-                  scrollToBottom();
-                }
+              const data = JSON.parse(trimmed.substring(6));
+              if (data.type === 'token') {
+                streamContentRef.current += data.content;
+                updateMessage(streamMsgId, streamContentRef.current);
               } else if (data.type === 'done') {
-                currentConversationId = data.conversation_id || currentConversationId;
-                if (streamBubble) {
-                  streamBubble.querySelector('.bubble-content').innerHTML = renderMarkdown(fullContent);
-                }
-                sendBtn.disabled = false;
-                chatInput.focus();
+                convIdRef.current = data.conversation_id || convIdRef.current;
+                updateMessage(streamMsgId, streamContentRef.current);
+                setIsSending(false);
+                if (inputRef.current) inputRef.current.focus();
                 return;
               }
-            } catch(e) {
-              // Ignore parse errors for incomplete chunks
-            }
+            } catch(e) { /* skip */ }
           }
-
           return processStream();
         });
       }
-
       return processStream();
-    }).catch(function(err) {
-      typingIndicator.style.display = 'none';
-      appendBubble('assistant', 'Network error. Please try again.');
-      sendBtn.disabled = false;
-      chatInput.focus();
+    }).catch(() => {
+      setIsTyping(false);
+      addMessage('assistant', 'Network error. Please try again.');
+      setIsSending(false);
+      if (inputRef.current) inputRef.current.focus();
     });
   }
 
-  sendBtn.addEventListener('click', sendMessage);
-  chatInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  });
+  function handleSend() {
+    const msg = inputVal.trim();
+    if (!msg && !pendingFile) return;
+    setInputVal('');
+    setIsSending(true);
 
-  // Render existing assistant messages as markdown
-  document.querySelectorAll('.chat-bubble.assistant .bubble-content').forEach(function(el) {
-    if (el.closest('#typingIndicator')) return;
-    var raw = el.textContent;
-    el.innerHTML = renderMarkdown(raw);
-  });
-
-  scrollToBottom();
-  chatInput.focus();
-})();
-
-// ══════════════════════════════════════════════════════════
-// Midnight Auto-Reset — Countdown & Auto-Refresh
-// ══════════════════════════════════════════════════════════
-(function setupMidnightRefresh() {
-  var countdownEl = document.getElementById('countdownText');
-  var countdownContainer = document.getElementById('midnightCountdown');
-
-  function getMsUntilMidnight() {
-    var now = new Date();
-    var midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    return midnight.getTime() - now.getTime();
-  }
-
-  function formatTime(ms) {
-    var totalSec = Math.floor(ms / 1000);
-    var h = Math.floor(totalSec / 3600);
-    var m = Math.floor((totalSec % 3600) / 60);
-    var s = totalSec % 60;
-    if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
-    if (m > 0) return m + 'm ' + s + 's';
-    return s + 's';
-  }
-
-  function updateCountdown() {
-    var ms = getMsUntilMidnight();
-    if (countdownEl) {
-      countdownEl.textContent = 'Fresh chat in ' + formatTime(ms);
-    }
-    return ms;
-  }
-
-  function checkMidnightReset() {
-    var ms = updateCountdown();
-
-    // Show countdown when less than 5 minutes remain
-    if (ms <= 300000 && countdownContainer) {
-      countdownContainer.style.display = 'block';
-    }
-
-    if (ms <= 1000) {
-      // Midnight reached — show alert and reload
-      if (typeof Swal !== 'undefined') {
-        Swal.fire({
-          title: 'New Day, Fresh Chat!',
-          text: 'It\'s midnight — starting a fresh conversation for you.',
-          icon: 'info',
-          timer: 3000,
-          showConfirmButton: false,
-          allowOutsideClick: false,
-        }).then(function() {
-          window.location.href = '{% url "claire-assistant" %}';
-        });
-      } else {
-        window.location.href = '{% url "claire-assistant" %}';
-      }
+    if (pendingFile) {
+      const file = pendingFile;
+      uploadFile(file).then(() => {
+        if (msg) doSendText(msg);
+        else { setIsSending(false); if (inputRef.current) inputRef.current.focus(); }
+      }).catch(() => {
+        if (msg) doSendText(msg);
+        else { setIsSending(false); if (inputRef.current) inputRef.current.focus(); }
+      });
       return;
     }
-
-    // Schedule next check
-    var nextCheck = ms <= 60000 ? 1000 : 60000;
-    setTimeout(checkMidnightReset, nextCheck);
+    doSendText(msg);
   }
 
-  checkMidnightReset();
-})();
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  }
 
-// ══════════════════════════════════════════════════════════
-// New Chat, Delete & Clear History
-// ══════════════════════════════════════════════════════════
-
-// New Chat Button
-var newChatBtn = document.getElementById('newChatBtn');
-if (newChatBtn) {
-  newChatBtn.addEventListener('click', function() {
-    window.location.href = '{% url "claire-assistant" %}?new=1';
-  });
-}
-
-// Delete Single Conversation
-function deleteConversation(conversationId) {
-  var confirmDelete = typeof Swal !== 'undefined'
-    ? Swal.fire.bind(Swal)
-    : function(opts) { return Promise.resolve({value: confirm(opts.title)}); };
-
-  confirmDelete({
-    title: 'Delete Conversation?',
-    text: 'This will permanently delete this conversation and its messages.',
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#d33',
-    confirmButtonText: 'Delete!',
-  }).then(function(result) {
-    if (!result.value) return;
-
-    var formData = new FormData();
-    formData.append('conv_id', conversationId);
-
-    fetch('{% url "claire-delete-conversation" %}', {
-      method: 'POST',
-      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-      body: formData,
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.status === 'ok') {
-        // Remove from sidebar DOM
-        var items = document.querySelectorAll('.conversation-item[data-conv-id="' + conversationId + '"]');
-        items.forEach(function(el) { el.remove(); });
-        // If deleted was current, redirect to fresh chat
-        if (conversationId == {{ current_conv_id|default:"0" }}) {
-          window.location.href = '{% url "claire-assistant" %}';
-        }
-      } else {
-        alert(data.message || 'Failed to delete.');
+  /* ── CRUD ── */
+  function handleDeleteConv(convId) {
+    const doDelete = () => {
+      if (typeof Swal !== 'undefined') {
+        return Swal.fire({ title: 'Delete Conversation?',
+          text: 'This will permanently delete this conversation.',
+          icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Delete!'
+        });
       }
-    })
-    .catch(function() { alert('Network error.'); });
-  });
-}
-
-// Clear All History
-var clearHistoryBtn = document.getElementById('clearHistoryBtn');
-if (clearHistoryBtn) {
-  clearHistoryBtn.addEventListener('click', function() {
-    var confirmClear = typeof Swal !== 'undefined'
-      ? Swal.fire.bind(Swal)
-      : function(opts) { return Promise.resolve({value: confirm(opts.title)}); };
-
-    confirmClear({
-      title: 'Clear All Chat History?',
-      text: 'This will permanently delete ALL your conversations.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      confirmButtonText: 'Clear All!',
-    }).then(function(result) {
+      return Promise.resolve({ value: confirm('Delete this conversation?') });
+    };
+    doDelete().then(result => {
       if (!result.value) return;
-
-      fetch('{% url "claire-clear-history" %}', {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': '{{ csrf_token }}',
-          'Content-Type': 'application/json',
-        },
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.status === 'ok') {
-          window.location.href = data.redirect_url || '{% url "claire-assistant" %}';
-        } else {
-          alert(data.message || 'Failed to clear history.');
-        }
-      })
-      .catch(function() { alert('Network error.'); });
+      const fd = new FormData(); fd.append('conv_id', convId);
+      fetch(C.urls.deleteConv, { method: 'POST', headers: { 'X-CSRFToken': C.csrfToken }, body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            setGroups(prev => prev.map(g => ({
+              ...g, conversations: g.conversations.filter(c => c.id !== convId)
+            })).filter(g => g.conversations.length > 0));
+            if (convId == C.currentConvId) window.location.href = C.urls.assistant;
+          } else { alert(data.message || 'Failed to delete.'); }
+        }).catch(() => alert('Network error.'));
     });
-  });
+  }
+
+  function handleClearHistory() {
+    const doClear = () => {
+      if (typeof Swal !== 'undefined') {
+        return Swal.fire({ title: 'Clear All Chat History?',
+          text: 'This will permanently delete ALL conversations.',
+          icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Clear All!'
+        });
+      }
+      return Promise.resolve({ value: confirm('Clear all history?') });
+    };
+    doClear().then(result => {
+      if (!result.value) return;
+      fetch(C.urls.clearHistory, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': C.csrfToken, 'Content-Type': 'application/json' }
+      }).then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') window.location.href = data.redirect_url || C.urls.assistant;
+          else alert(data.message || 'Failed to clear history.');
+        }).catch(() => alert('Network error.'));
+    });
+  }
+
+  function handleNewChat() {
+    window.location.href = `${C.urls.assistant}?new=1`;
+  }
+
+  /* ── Render ── */
+  return (
+    <div className="nova-chat-page">
+      {/* Sidebar */}
+      <ChatSidebar groups={groups} onDelete={handleDeleteConv}
+        onNewChat={handleNewChat} onClearHistory={handleClearHistory} countdown={countdown} />
+
+      {/* Main Chat Area */}
+      <div className="nova-chat-main">
+        {/* Top Bar — Glassmorphism */}
+        <div className="nova-chat-topbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="nova-topbar-avatar">
+              <i className="fas fa-robot" style={{ color: '#fff', fontSize: '0.95rem' }}></i>
+              <span className="nova-topbar-status-dot"></span>
+            </div>
+            <div>
+              <div className="nova-topbar-title">{C.conversationTitle}</div>
+              <div className="nova-topbar-status">
+                <span className="nova-status-pulse"></span>
+                Online &mdash; Ready to assist
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <a href={`${C.urls.assistant}?new=1`} className="nova-topbar-btn nova-topbar-btn-primary">
+              <i className="fas fa-plus"></i> New Chat
+            </a>
+            <a href={C.urls.history} className="nova-topbar-btn nova-topbar-btn-ghost">
+              <i className="fas fa-history"></i> History
+            </a>
+          </div>
+        </div>
+
+        {/* Messages Area */}
+        <div className="nova-chat-messages" ref={chatAreaRef}>
+          {messages.length === 0 ? <EmptyState /> : (
+            messages.map(msg => <ChatBubble key={msg.id} role={msg.role} content={msg.content} />)
+          )}
+          {isTyping && <TypingIndicator />}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Upload Progress */}
+        {uploadProgress && (
+          <div className="nova-upload-bar">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <i className="fas fa-paperclip" style={{ marginRight: '4px' }}></i>
+                Uploading {uploadProgress.name}...
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#4f8ef7' }}>{uploadProgress.pct}%</span>
+            </div>
+            <div className="nova-upload-progress">
+              <div style={{ width: `${uploadProgress.pct}%` }}></div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending File Badge */}
+        {pendingFile && !uploadProgress && (
+          <div style={{ padding: '0 20px', paddingBottom: '4px' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px',
+              background: 'rgba(79,142,247,0.08)', borderRadius: '20px', fontSize: '0.8rem', color: '#4f8ef7'
+            }}>
+              <i className="fas fa-paperclip"></i>
+              <span>{pendingFile.name}</span>
+              <span style={{ cursor: 'pointer', color: '#ef4444', fontWeight: 700, marginLeft: '4px' }}
+                onClick={removePendingFile}>&times;</span>
+            </div>
+          </div>
+        )}
+
+        {/* Input Area — Refined */}
+        <div className="nova-chat-input-area">
+          <div className="nova-chat-input-wrapper">
+            <button className="nova-chat-attach-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              title="Upload file">
+              <i className="fas fa-paperclip"></i>
+            </button>
+            <textarea className="nova-chat-textarea" rows="1" ref={inputRef}
+              placeholder="Message Claire..." value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ resize: 'none', overflow: 'hidden' }}
+            />
+            <button className={`nova-chat-send-btn ${(inputVal.trim() || pendingFile) && !isSending ? 'active' : ''}`}
+              onClick={handleSend} disabled={isSending}>
+              <i className="fas fa-arrow-up"></i>
+            </button>
+          </div>
+          <input type="file" ref={fileInputRef} style={{ display: 'none' }}
+            accept=".pdf,.txt,.doc,.docx,.pptx,.xlsx,.csv,.json,.xml"
+            onChange={handleFileSelect} />
+          <div className="nova-input-disclaimer">
+            <i className="fas fa-shield-alt" style={{ marginRight: '4px', fontSize: '0.6rem' }}></i>
+            Claire can make mistakes. Please verify important information.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
+
+/* ── Mount ── */
+const root = ReactDOM.createRoot(document.getElementById('nova-claire-root'));
+root.render(<ClaireApp />);
+{% endverbatim %}
 </script>
-<!-- SweetAlert2 for midnight popup (optional — works without it too) -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 {% endblock %}

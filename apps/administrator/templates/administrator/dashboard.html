@@ -2,356 +2,432 @@
 {% load static %}
 
 {% block body %}
-<!-- Content Header -->
-<div class="content-header">
-  <div class="container-fluid">
-    <div class="row align-items-center">
-      <div class="col-sm-6">
-        <h1 class="m-0" style="font-weight:800;color:#0f172a;letter-spacing:-0.5px;">
-          <i class="fas fa-tachometer-alt mr-2" style="color:#4f8ef7;font-size:1.1rem;"></i>Dashboard
-        </h1>
-        <p class="text-muted mb-0" style="font-size:.82rem;margin-top:2px;">Welcome back, Administrator</p>
+<!-- Inject Django data for React -->
+<script>
+window.__DASHBOARD__ = {
+  usersCount: {{ users_count|default:"0" }},
+  activeUsersCount: {{ active_users_count|default:"0" }},
+  newUsersCount: {{ new_users_count|default:"0" }},
+  inactiveUsersCount: {{ inactive_users_count|default:"0" }},
+  plansCount: {{ plans_count|default:"0" }},
+  activePlansCount: {{ active_plans_count|default:"0" }},
+  activeSubsCount: {{ active_subs_count|default:"0" }},
+  chartLabels: {{ chart_labels|safe }},
+  chartValues: {{ chart_values|safe }},
+  recentPlans: [
+    {% for plan in recent_plans %}
+    {
+      id: {{ plan.pk }},
+      name: "{{ plan.name|escapejs }}",
+      price: "{{ plan.price }}",
+      duration: "{{ plan.get_duration_days_display|escapejs }}",
+      subscribers: {{ plan.subscriptions.count }},
+      isActive: {% if plan.is_active %}true{% else %}false{% endif %},
+      editUrl: "{% url 'admin-subscription-plan-edit' plan.pk %}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  recentUsers: [
+    {% for u in recent_users %}
+    {
+      id: {{ u.pk }},
+      name: "{{ u.get_full_name|default:'-'|escapejs }}",
+      email: "{{ u.email|escapejs }}",
+      dateJoined: "{{ u.date_joined|date:'d M Y' }}",
+      isActive: {% if u.is_active %}true{% else %}false{% endif %},
+      detailUrl: "{% url 'admin-user-detail' u.pk %}",
+      editUrl: "{% url 'admin-user-edit' u.pk %}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  urls: {
+    userList: "{% url 'admin-user-list' %}",
+    userAdd: "{% url 'admin-user-add' %}",
+    planList: "{% url 'admin-subscription-plan-list' %}",
+    planAdd: "{% url 'admin-subscription-plan-add' %}",
+  }
+};
+</script>
+
+<!-- React mount point -->
+<div id="nova-dashboard-root"></div>
+
+<!-- React Dashboard App -->
+<script type="text/babel">
+{% verbatim %}
+const { useState, useEffect, useRef, useCallback } = React;
+const D = window.__DASHBOARD__;
+
+/* ── Animated Counter Hook ── */
+function useCounter(target, duration = 900) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!target) return;
+    let start = 0;
+    const step = 16;
+    const inc = target / (duration / step);
+    const timer = setInterval(() => {
+      start += inc;
+      if (start >= target) { start = target; clearInterval(timer); }
+      setVal(Math.floor(start));
+    }, step);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+  return val;
+}
+
+/* ── Stat Card Component ── */
+function StatCard({ icon, value, label, gradient, bgIcon, link, delay = 0 }) {
+  const count = useCounter(value);
+  return (
+    <a href={link} className="nova-stat-card" style={{
+      background: gradient,
+      animationDelay: `${delay}s`,
+      animation: `fadeInUp 0.5s ease ${delay}s both`,
+      textDecoration: 'none', color: '#fff'
+    }}>
+      <div className="stat-icon"><i className={`fas ${icon}`}></i></div>
+      <div className="stat-number">{count.toLocaleString()}</div>
+      <div className="stat-label">{label}</div>
+      <div className="stat-footer"><i className="fas fa-arrow-right"></i> View details</div>
+      <div className="stat-bg-icon"><i className={`fas ${bgIcon || icon}`}></i></div>
+    </a>
+  );
+}
+
+/* ── Chart Card Component ── */
+function BarChartCard() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || typeof Chart === 'undefined') return;
+    const ctx = canvasRef.current.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 250);
+    grad.addColorStop(0, 'rgba(79,142,247,0.85)');
+    grad.addColorStop(1, 'rgba(99,102,241,0.15)');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: D.chartLabels,
+        datasets: [{
+          label: 'New Customers',
+          data: D.chartValues,
+          backgroundColor: grad,
+          borderColor: 'rgba(79,142,247,1)',
+          borderWidth: 2,
+          borderRadius: 6,
+          barThickness: 28,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        legend: { display: false },
+        scales: {
+          xAxes: [{ gridLines: { display: false }, ticks: { fontColor: '#94a3b8', fontSize: 11 } }],
+          yAxes: [{ gridLines: { color: 'rgba(148,163,184,0.12)', drawBorder: false },
+            ticks: { beginAtZero: true, precision: 0, fontColor: '#94a3b8', fontSize: 11 } }]
+        },
+        animation: { duration: 1200, easing: 'easeOutQuart' },
+        tooltips: {
+          backgroundColor: '#1e293b', titleFontColor: '#fff',
+          bodyFontColor: '#cbd5e1', borderColor: '#334155',
+          borderWidth: 1, cornerRadius: 8, xPadding: 12, yPadding: 10,
+        }
+      }
+    });
+  }, []);
+  return (
+    <div className="nova-chart-card">
+      <div className="chart-header">
+        <h3><i className="fas fa-chart-bar"></i> Monthly Customer Registrations</h3>
       </div>
-      <div class="col-sm-6">
-        <ol class="breadcrumb float-sm-right" style="background:transparent;padding:0;margin:0;">
-          <li class="breadcrumb-item"><a href="#" style="color:#4f8ef7;">Home</a></li>
-          <li class="breadcrumb-item active" style="color:#94a3b8;">Dashboard</li>
-        </ol>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /.content-header -->
-
-<section class="content">
-  <div class="container-fluid">
-
-    <!-- ── Stat Boxes ── -->
-    <div class="row">
-
-      <!-- Total Customers -->
-      <div class="col-lg-3 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#fff;">
-          <div class="inner">
-            <h3>{{ users_count }}</h3>
-            <p>Total Customers</p>
-          </div>
-          <div class="icon"><i class="fas fa-users"></i></div>
-          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            More info <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-      <!-- Active Customers -->
-      <div class="col-lg-3 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#22c55e,#4ade80);color:#fff;">
-          <div class="inner">
-            <h3>{{ active_users_count }}</h3>
-            <p>Active Customers</p>
-          </div>
-          <div class="icon"><i class="fas fa-user-check"></i></div>
-          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            More info <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-      <!-- New This Month -->
-      <div class="col-lg-3 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;">
-          <div class="inner">
-            <h3>{{ new_users_count }}</h3>
-            <p>New (Last 30 Days)</p>
-          </div>
-          <div class="icon"><i class="fas fa-user-plus"></i></div>
-          <a href="{% url 'admin-user-add' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            Add Customer <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-      <!-- Inactive Customers -->
-      <div class="col-lg-3 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#ef4444,#f87171);color:#fff;">
-          <div class="inner">
-            <h3>{{ inactive_users_count }}</h3>
-            <p>Inactive Customers</p>
-          </div>
-          <div class="icon"><i class="fas fa-user-slash"></i></div>
-          <a href="{% url 'admin-user-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            View List <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-    </div>
-    <!-- /.row (stat boxes) -->
-
-    <!-- ── Subscription Boxes ── -->
-    <div class="row">
-
-      <!-- Total Plans -->
-      <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa);color:#fff;">
-          <div class="inner">
-            <h3>{{ plans_count }}</h3>
-            <p>Total Plans</p>
-          </div>
-          <div class="icon"><i class="fas fa-tags"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            Manage Plans <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-      <!-- Active Plans -->
-      <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#0891b2,#22d3ee);color:#fff;">
-          <div class="inner">
-            <h3>{{ active_plans_count }}</h3>
-            <p>Active Plans</p>
-          </div>
-          <div class="icon"><i class="fas fa-check-circle"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            View Plans <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-      <!-- Active Subscriptions -->
-      <div class="col-lg-4 col-6">
-        <div class="small-box" style="background:linear-gradient(135deg,#db2777,#f472b6);color:#fff;">
-          <div class="inner">
-            <h3>{{ active_subs_count }}</h3>
-            <p>Active Subscriptions</p>
-          </div>
-          <div class="icon"><i class="fas fa-star"></i></div>
-          <a href="{% url 'admin-subscription-plan-list' %}" class="small-box-footer" style="background:rgba(0,0,0,.12);">
-            View Details <i class="fas fa-arrow-circle-right"></i>
-          </a>
-        </div>
-      </div>
-
-    </div>
-    <!-- /.row (subscription boxes) -->
-
-    <!-- ── Charts Row ── -->
-    <div class="row">
-      <div class="col-md-8">
-        <div class="card card-info">
-          <div class="card-header" style="background:linear-gradient(90deg,#4f8ef7,#6366f1);">
-            <h3 class="card-title text-white">
-              <i class="fas fa-chart-bar mr-2"></i>Monthly Customer Registrations
-            </h3>
-          </div>
-          <div class="card-body" style="background:#fff;">
-            <canvas id="registrationChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-md-4">
-        <div class="card card-primary">
-          <div class="card-header" style="background:linear-gradient(90deg,#6366f1,#818cf8);">
-            <h3 class="card-title text-white">
-              <i class="fas fa-chart-pie mr-2"></i>Active vs Inactive
-            </h3>
-          </div>
-          <div class="card-body d-flex flex-column align-items-center justify-content-center" style="background:#fff;">
-            <canvas id="pieChart" style="min-height:250px;height:250px;max-height:250px;max-width:100%;"></canvas>
-          </div>
-        </div>
+      <div className="chart-body">
+        <canvas ref={canvasRef} style={{ minHeight: '260px', height: '260px', maxHeight: '260px', maxWidth: '100%' }}></canvas>
       </div>
     </div>
-    <!-- /.charts row -->
+  );
+}
 
-    <!-- ── Recent Subscription Plans ── -->
-    <div class="row">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header" style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);">
-            <h3 class="card-title text-white">
-              <i class="fas fa-tags mr-2"></i>Subscription Plans
-            </h3>
-            <div class="card-tools">
-              <a href="{% url 'admin-subscription-plan-add' %}" class="btn btn-sm"
-                 style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3);">
-                <i class="fas fa-plus"></i> Add Plan
-              </a>
+function DoughnutChartCard() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || typeof Chart === 'undefined') return;
+    new Chart(canvasRef.current.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Active', 'Inactive'],
+        datasets: [{
+          data: [D.activeUsersCount, D.inactiveUsersCount],
+          backgroundColor: ['#4f8ef7', '#e2e8f0'],
+          hoverBackgroundColor: ['#6366f1', '#cbd5e1'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutoutPercentage: 72,
+        legend: {
+          display: true, position: 'bottom',
+          labels: { fontColor: '#64748b', fontSize: 12, padding: 16, usePointStyle: true }
+        },
+        animation: { animateRotate: true, duration: 1200, easing: 'easeOutQuart' },
+        tooltips: {
+          backgroundColor: '#1e293b', bodyFontColor: '#cbd5e1',
+          cornerRadius: 8, xPadding: 12, yPadding: 10,
+        }
+      }
+    });
+  }, []);
+  return (
+    <div className="nova-chart-card">
+      <div className="chart-header">
+        <h3><i className="fas fa-chart-pie"></i> Active vs Inactive</h3>
+      </div>
+      <div className="chart-body" style={{ display: 'flex', justifyContent: 'center' }}>
+        <canvas ref={canvasRef} style={{ minHeight: '260px', height: '260px', maxHeight: '260px', maxWidth: '100%' }}></canvas>
+      </div>
+    </div>
+  );
+}
+
+/* ── Quick Actions ── */
+function QuickActions() {
+  return (
+    <div className="nova-quick-actions">
+      <a href={D.urls.userAdd} className="nova-quick-action">
+        <i className="fas fa-user-plus" style={{ color: '#0ea5e9' }}></i> Add Customer
+      </a>
+      <a href={D.urls.planAdd} className="nova-quick-action">
+        <i className="fas fa-plus-circle" style={{ color: '#8b5cf6' }}></i> Add Plan
+      </a>
+      <a href={D.urls.userList} className="nova-quick-action">
+        <i className="fas fa-list" style={{ color: '#f59e0b' }}></i> All Customers
+      </a>
+      <a href={D.urls.planList} className="nova-quick-action">
+        <i className="fas fa-tags" style={{ color: '#22c55e' }}></i> All Plans
+      </a>
+    </div>
+  );
+}
+
+/* ── Plans Table ── */
+function PlansTable() {
+  return (
+    <div className="nova-table-card">
+      <div className="table-header">
+        <h3><i className="fas fa-tags"></i> Subscription Plans</h3>
+        <div className="table-actions">
+          <a href={D.urls.planAdd} className="btn btn-sm btn-primary">
+            <i className="fas fa-plus mr-1"></i> Add Plan
+          </a>
+        </div>
+      </div>
+      <div className="table-body">
+        <table className="nova-table">
+          <thead>
+            <tr>
+              <th>Plan Name</th>
+              <th>Price</th>
+              <th>Duration</th>
+              <th>Subscribers</th>
+              <th>Status</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {D.recentPlans.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>
+                  No plans yet. <a href={D.urls.planAdd}>Add first plan.</a>
+                </td>
+              </tr>
+            ) : D.recentPlans.map((plan, i) => (
+              <tr key={plan.id}>
+                <td><strong>{plan.name}</strong></td>
+                <td>${plan.price}</td>
+                <td>{plan.duration}</td>
+                <td><span className="nova-pill nova-pill-info">{plan.subscribers}</span></td>
+                <td>
+                  {plan.isActive
+                    ? <span className="nova-pill nova-pill-success"><i className="fas fa-check-circle" style={{fontSize:'0.65rem'}}></i> Active</span>
+                    : <span className="nova-pill nova-pill-gray">Inactive</span>}
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <a href={plan.editUrl} className="btn btn-xs btn-warning text-white">
+                    <i className="fas fa-edit"></i> Edit
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-footer">
+        <a href={D.urls.planList} className="btn btn-sm btn-default">View All Plans</a>
+      </div>
+    </div>
+  );
+}
+
+/* ── Customers Table ── */
+function CustomersTable() {
+  return (
+    <div className="nova-table-card">
+      <div className="table-header">
+        <h3><i className="fas fa-users"></i> Recently Registered Customers</h3>
+        <div className="table-actions">
+          <a href={D.urls.userAdd} className="btn btn-sm btn-primary">
+            <i className="fas fa-plus mr-1"></i> Add Customer
+          </a>
+        </div>
+      </div>
+      <div className="table-body">
+        <table className="nova-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Joined</th>
+              <th>Status</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {D.recentUsers.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>
+                  No customers registered yet.
+                </td>
+              </tr>
+            ) : D.recentUsers.map((u, i) => (
+              <tr key={u.id}>
+                <td>{i + 1}</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #4f8ef7, #6366f1)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: '0.72rem', fontWeight: 700, flexShrink: 0
+                    }}>
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{u.name}</span>
+                  </div>
+                </td>
+                <td>{u.email}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{u.dateJoined}</td>
+                <td>
+                  {u.isActive
+                    ? <span className="nova-pill nova-pill-success"><i className="fas fa-check-circle" style={{fontSize:'0.65rem'}}></i> Active</span>
+                    : <span className="nova-pill nova-pill-danger"><i className="fas fa-times-circle" style={{fontSize:'0.65rem'}}></i> Inactive</span>}
+                </td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <a href={u.detailUrl} className="btn btn-xs btn-info text-white mr-1">
+                    <i className="fas fa-eye"></i> View
+                  </a>
+                  <a href={u.editUrl} className="btn btn-xs btn-warning text-white">
+                    <i className="fas fa-edit"></i> Edit
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-footer">
+        <a href={D.urls.userList} className="btn btn-sm btn-default">View All Customers</a>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Dashboard App ── */
+function DashboardApp() {
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  return (
+    <>
+      {/* Content Header */}
+      <div className="content-header">
+        <div className="container-fluid">
+          <div className="row align-items-center">
+            <div className="col-sm-6">
+              <h1 className="m-0" style={{ fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
+                <i className="fas fa-tachometer-alt mr-2" style={{ color: '#4f8ef7', fontSize: '1.1rem' }}></i>Dashboard
+              </h1>
+            </div>
+            <div className="col-sm-6">
+              <ol className="breadcrumb float-sm-right" style={{ background: 'transparent', padding: 0, margin: 0 }}>
+                <li className="breadcrumb-item"><a href="#" style={{ color: '#4f8ef7' }}>Home</a></li>
+                <li className="breadcrumb-item active" style={{ color: '#94a3b8' }}>Dashboard</li>
+              </ol>
             </div>
           </div>
-          <div class="card-body table-responsive p-0">
-            <table class="table table-hover">
-              <thead>
-                <tr>
-                  <th>Plan Name</th>
-                  <th>Price</th>
-                  <th>Duration</th>
-                  <th>Subscribers</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for plan in recent_plans %}
-                <tr>
-                  <td><strong>{{ plan.name }}</strong></td>
-                  <td>${{ plan.price }}</td>
-                  <td>{{ plan.get_duration_days_display }}</td>
-                  <td><span class="badge badge-info">{{ plan.subscriptions.count }}</span></td>
-                  <td>
-                    {% if plan.is_active %}
-                      <span class="badge badge-success">Active</span>
-                    {% else %}
-                      <span class="badge badge-secondary">Inactive</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    <a href="{% url 'admin-subscription-plan-edit' plan.pk %}" class="btn btn-xs btn-warning text-white">
-                      <i class="fas fa-edit"></i> Edit
-                    </a>
-                  </td>
-                </tr>
-                {% empty %}
-                <tr>
-                  <td colspan="6" class="text-center text-muted">No plans yet. <a href="{% url 'admin-subscription-plan-add' %}">Add first plan.</a></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="card-footer">
-            <a href="{% url 'admin-subscription-plan-list' %}" class="btn btn-sm btn-default">View All Plans</a>
-          </div>
         </div>
       </div>
-    </div>
-    <!-- /.subscription plans row -->
 
-    <!-- ── Recent Customers ── -->
-    <div class="row">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);">
-            <h3 class="card-title text-white">
-              <i class="fas fa-users mr-2"></i>Recently Registered Customers
-            </h3>
-            <div class="card-tools">
-              <a href="{% url 'admin-user-add' %}" class="btn btn-sm"
-                 style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3);">
-                <i class="fas fa-plus"></i> Add Customer
-              </a>
-            </div>
+      <section className="content">
+        <div className="container-fluid">
+          {/* Greeting */}
+          <div className="nova-greeting">
+            <h2>{greeting}, Administrator <span style={{ fontSize: '1.4rem' }}>&#128075;</span></h2>
+            <p>{dateStr} &mdash; Here's what's happening with your platform today.</p>
           </div>
-          <div class="card-body table-responsive p-0">
-            <table class="table table-hover text-nowrap">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Joined</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for u in recent_users %}
-                <tr>
-                  <td>{{ forloop.counter }}</td>
-                  <td>{{ u.get_full_name|default:"-" }}</td>
-                  <td>{{ u.email }}</td>
-                  <td>{{ u.date_joined|date:"d M Y" }}</td>
-                  <td>
-                    {% if u.is_active %}
-                      <span class="badge badge-success">Active</span>
-                    {% else %}
-                      <span class="badge badge-danger">Inactive</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    <a href="{% url 'admin-user-detail' u.pk %}" class="btn btn-xs btn-info text-white mr-1">
-                      <i class="fas fa-eye"></i> View
-                    </a>
-                    <a href="{% url 'admin-user-edit' u.pk %}" class="btn btn-xs btn-warning text-white">
-                      <i class="fas fa-edit"></i> Edit
-                    </a>
-                  </td>
-                </tr>
-                {% empty %}
-                <tr>
-                  <td colspan="6" class="text-center text-muted">No customers registered yet.</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+
+          {/* Quick Actions */}
+          <QuickActions />
+
+          {/* Stat Cards — Customer Row */}
+          <div className="nova-stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <StatCard icon="fa-users" value={D.usersCount} label="Total Customers"
+              gradient="linear-gradient(135deg, #0ea5e9, #38bdf8)" bgIcon="fa-users"
+              link={D.urls.userList} delay={0.05} />
+            <StatCard icon="fa-user-check" value={D.activeUsersCount} label="Active Customers"
+              gradient="linear-gradient(135deg, #22c55e, #4ade80)" bgIcon="fa-user-check"
+              link={D.urls.userList} delay={0.1} />
+            <StatCard icon="fa-user-plus" value={D.newUsersCount} label="New (Last 30 Days)"
+              gradient="linear-gradient(135deg, #f59e0b, #fbbf24)" bgIcon="fa-user-plus"
+              link={D.urls.userAdd} delay={0.15} />
+            <StatCard icon="fa-user-slash" value={D.inactiveUsersCount} label="Inactive Customers"
+              gradient="linear-gradient(135deg, #ef4444, #f87171)" bgIcon="fa-user-slash"
+              link={D.urls.userList} delay={0.2} />
           </div>
-          <div class="card-footer">
-            <a href="{% url 'admin-user-list' %}" class="btn btn-default btn-sm">View All Customers</a>
+
+          {/* Stat Cards — Subscription Row */}
+          <div className="nova-stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <StatCard icon="fa-tags" value={D.plansCount} label="Total Plans"
+              gradient="linear-gradient(135deg, #8b5cf6, #a78bfa)" bgIcon="fa-tags"
+              link={D.urls.planList} delay={0.08} />
+            <StatCard icon="fa-check-circle" value={D.activePlansCount} label="Active Plans"
+              gradient="linear-gradient(135deg, #0891b2, #22d3ee)" bgIcon="fa-check-circle"
+              link={D.urls.planList} delay={0.14} />
+            <StatCard icon="fa-star" value={D.activeSubsCount} label="Active Subscriptions"
+              gradient="linear-gradient(135deg, #db2777, #f472b6)" bgIcon="fa-star"
+              link={D.urls.planList} delay={0.2} />
           </div>
+
+          {/* Charts */}
+          <div className="nova-chart-grid">
+            <BarChartCard />
+            <DoughnutChartCard />
+          </div>
+
+          {/* Tables */}
+          <PlansTable />
+          <CustomersTable />
         </div>
-      </div>
-    </div>
-    <!-- /.recent customers row -->
+      </section>
+    </>
+  );
+}
 
-  </div><!-- /.container-fluid -->
-</section>
-<!-- /.content -->
-{% endblock %}
-
-{% block script %}
-// ── Monthly Registrations Bar Chart (Chart.js v2) ──
-var ctx = document.getElementById('registrationChart').getContext('2d');
-var gradBar = ctx.createLinearGradient(0, 0, 0, 250);
-gradBar.addColorStop(0, 'rgba(79,142,247,0.85)');
-gradBar.addColorStop(1, 'rgba(99,102,241,0.25)');
-new Chart(ctx, {
-  type: 'bar',
-  data: {
-    labels: {{ chart_labels|safe }},
-    datasets: [{
-      label: 'New Customers',
-      data: {{ chart_values|safe }},
-      backgroundColor: gradBar,
-      borderColor: 'rgba(79,142,247,1)',
-      borderWidth: 2
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    legend: { display: false },
-    scales: {
-      xAxes: [{ gridLines: { display: false },
-                ticks: { fontColor: '#94a3b8', fontSize: 11 } }],
-      yAxes: [{ gridLines: { color: 'rgba(148,163,184,0.15)', drawBorder: false },
-                ticks: { beginAtZero: true, precision: 0, fontColor: '#94a3b8', fontSize: 11 } }]
-    },
-    animation: { duration: 1000, easing: 'easeOutQuart' }
-  }
-});
-
-// ── Active vs Inactive Doughnut (Chart.js v2) ──
-var pie = document.getElementById('pieChart').getContext('2d');
-new Chart(pie, {
-  type: 'doughnut',
-  data: {
-    labels: ['Active', 'Inactive'],
-    datasets: [{
-      data: [{{ active_users_count }}, {{ inactive_users_count }}],
-      backgroundColor: ['#4f8ef7', '#e2e8f0'],
-      hoverBackgroundColor: ['#6366f1', '#cbd5e1'],
-      borderWidth: 0
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutoutPercentage: 72,
-    legend: { display: true, position: 'bottom',
-              labels: { fontColor: '#64748b', fontSize: 12, padding: 16, usePointStyle: true } },
-    animation: { animateRotate: true, duration: 1000, easing: 'easeOutQuart' }
-  }
-});
+/* ── Mount ── */
+const root = ReactDOM.createRoot(document.getElementById('nova-dashboard-root'));
+root.render(<DashboardApp />);
+{% endverbatim %}
+</script>
 {% endblock %}

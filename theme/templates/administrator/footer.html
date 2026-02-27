@@ -95,33 +95,29 @@
 
     var ajaxUrl = $('#list_page_url').val();
     var oTable = $('#datatable').DataTable({
-          "pageLength":10,
-          "serverSide": true,
-
-          "ordering": true,
-              columnDefs: [{
-              "width": "20%",
-              orderable: false,
-              targets: "no-sort"
-              }],
-          "language": {
-          "emptyTable": "No data available"
-           },
-          "order": [],
-          "ajax": { "url": ajaxUrl },
-          "scrollX": true,
-          "initComplete": function(settings, json){
-                $('#id_count').html(settings.json.recordsTotal);
-           },
-           "columnDefs": [{
-                "targets": [-1],
-                "orderable": false,
-                "className": 'text-right'
-            }],
+      "pageLength": 10,
+      "serverSide": true,
+      "ordering": true,
+      "language": { "emptyTable": "No data available" },
+      "order": [],
+      "ajax": { "url": ajaxUrl },
+      "scrollX": true,
+      "columns": [
+        { "data": "first_name", "name": "first_name" },
+        { "data": "last_name",  "name": "last_name" },
+        { "data": "email",      "name": "email" },
+        { "data": "is_active",  "name": "is_active",  "orderable": true },
+        { "data": "actions",    "name": "actions",     "orderable": false, "className": "text-right" }
+      ],
+      "initComplete": function(settings, json) {
+        $('#id_count').html(settings.json.recordsTotal);
+      }
     });
 </script>
 
 {% if user.is_authenticated %}
+{% url 'claire-assistant' as claire_url %}
+{% if request.path != claire_url %}
 <!-- ══════════════════════════════════════════════════════════════
      CLAIRE CHAT WIDGET — inject user/CSRF data for JS
      ══════════════════════════════════════════════════════════════ -->
@@ -159,7 +155,7 @@ window.claireWidgetData = {
         <div class="claire-avatar"><i class="fas fa-robot"></i></div>
         <div>
           <div class="claire-title">Claire</div>
-          <div class="claire-subtitle" id="claireStatus">AI Assistant · Online</div>
+          <div class="claire-subtitle" id="claireStatus"><span class="claire-status-dot"></span> AI Assistant &middot; Online</div>
         </div>
       </div>
       <div class="claire-header-btns">
@@ -185,7 +181,7 @@ window.claireWidgetData = {
     </div>
     <div id="claireUploadProgress" style="display:none;padding:0 12px 6px;">
       <div style="height:3px;background:#e9ecef;border-radius:2px;">
-        <div id="claireProgressBar" style="height:100%;width:0%;background:#007bff;border-radius:2px;transition:width 0.2s;"></div>
+        <div id="claireProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4f8ef7,#6366f1);border-radius:2px;transition:width 0.25s ease;"></div>
       </div>
     </div>
 
@@ -214,233 +210,355 @@ window.claireWidgetData = {
 
 <!-- ── Widget CSS ── -->
 <style>
-/* ==== Floating toggle button ==== */
+/* ============================================================
+   NOVA CLAIRE WIDGET
+   ============================================================ */
 #claireWidget {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 28px;
+  right: 28px;
   z-index: 99999;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
 }
+
+/* ── Toggle Button ── */
 #claireToggleBtn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #4f8ef7 0%, #6366f1 100%);
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,123,255,0.4);
+  box-shadow: 0 8px 24px rgba(79,142,247,0.45), 0 2px 8px rgba(0,0,0,0.12);
   color: #fff;
   font-size: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s ease;
   position: relative;
+  will-change: transform;
 }
-#claireToggleBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 25px rgba(0,123,255,0.5); }
+#claireToggleBtn:hover {
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 12px 32px rgba(79,142,247,0.55), 0 4px 12px rgba(0,0,0,0.15);
+}
+#claireToggleBtn:active { transform: scale(0.95); }
+
 .claire-notif-dot {
   position: absolute;
-  top: 4px; right: 4px;
-  width: 10px; height: 10px;
-  background: #dc3545;
+  top: 3px; right: 3px;
+  width: 11px; height: 11px;
+  background: #ef4444;
   border-radius: 50%;
   border: 2px solid #fff;
-  animation: clairePulse 2s infinite;
+  animation: clairePulse 2s cubic-bezier(.4,0,.6,1) infinite;
 }
-@keyframes clairePulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:0.7} }
+@keyframes clairePulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.4); opacity: 0.65; }
+}
 
-/* ==== Chat window ==== */
+/* ── Chat Window ── */
 .claire-window {
   position: absolute;
-  bottom: 68px;
+  bottom: 72px;
   right: 0;
-  width: 380px;
-  height: 540px;
+  width: 390px;
+  height: 560px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15,23,42,0.18), 0 4px 16px rgba(15,23,42,0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: claireSlideIn 0.25s ease;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(226,232,240,0.8);
+  animation: claireSlideIn 0.3s cubic-bezier(.22,.68,0,1.2) both;
+  transform-origin: bottom right;
 }
 @keyframes claireSlideIn {
-  from { opacity:0; transform:translateY(12px) scale(0.97); }
-  to   { opacity:1; transform:translateY(0)   scale(1); }
+  from { opacity: 0; transform: translateY(16px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 
-/* Header */
+/* ── Header ── */
 .claire-header {
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-  padding: 14px 16px;
+  background: linear-gradient(135deg, #4f8ef7 0%, #6366f1 100%);
+  padding: 14px 16px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
 }
-.claire-header-info { display: flex; align-items: center; gap: 10px; }
+.claire-header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 120% -20%, rgba(255,255,255,0.18) 0%, transparent 60%);
+  pointer-events: none;
+}
+.claire-header-info { display: flex; align-items: center; gap: 11px; }
 .claire-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
+  width: 38px; height: 38px; border-radius: 12px;
   background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; color: #fff;
+  font-size: 17px; color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  flex-shrink: 0;
 }
-.claire-title { font-weight: 600; font-size: 15px; color: #fff; }
-.claire-subtitle { font-size: 11px; color: rgba(255,255,255,0.8); }
-.claire-header-btns { display: flex; gap: 6px; }
+.claire-title { font-weight: 700; font-size: 14px; color: #fff; letter-spacing: 0.1px; }
+.claire-subtitle {
+  font-size: 10.5px; color: rgba(255,255,255,0.82);
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 1px;
+}
+.claire-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74,222,128,0.8);
+  display: inline-block;
+}
+.claire-header-btns { display: flex; gap: 5px; position: relative; z-index: 1; }
 .claire-hdr-btn {
   background: rgba(255,255,255,0.15);
-  border: none;
+  border: 1px solid rgba(255,255,255,0.2);
   color: #fff;
-  width: 28px; height: 28px;
-  border-radius: 6px;
+  width: 30px; height: 30px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   display: flex; align-items: center; justify-content: center;
   text-decoration: none;
-  transition: background 0.15s;
+  transition: background 0.18s ease, transform 0.15s ease;
 }
-.claire-hdr-btn:hover { background: rgba(255,255,255,0.3); color: #fff; }
+.claire-hdr-btn:hover {
+  background: rgba(255,255,255,0.28);
+  color: #fff;
+  transform: scale(1.08);
+}
 
-/* Messages */
+/* ── Messages ── */
 .claire-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  background: #f8f9fa;
+  padding: 16px 14px;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  scroll-behavior: smooth;
 }
-.claire-messages::-webkit-scrollbar { width: 4px; }
-.claire-messages::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+.claire-messages::-webkit-scrollbar { width: 3px; }
+.claire-messages::-webkit-scrollbar-track { background: transparent; }
+.claire-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
-/* Bubbles */
+/* ── Bubble Wraps ── */
 .claire-bubble-wrap {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 7px;
+  animation: claireBubbleIn 0.22s cubic-bezier(.22,.68,0,1.1) both;
 }
-.claire-bubble-wrap.user  { flex-direction: row-reverse; }
+@keyframes claireBubbleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.claire-bubble-wrap.user      { flex-direction: row-reverse; }
 .claire-bubble-wrap.assistant { flex-direction: row; }
-.claire-bubble-wrap.system { justify-content: center; }
+.claire-bubble-wrap.system    { justify-content: center; }
 
 .claire-bubble-icon {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 28px; height: 28px; border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; flex-shrink: 0; margin-bottom: 2px;
 }
-.claire-bubble-wrap.user .claire-bubble-icon    { background: #007bff; color: #fff; }
-.claire-bubble-wrap.assistant .claire-bubble-icon { background: #17a2b8; color: #fff; }
+.claire-bubble-wrap.user .claire-bubble-icon {
+  background: linear-gradient(135deg, #4f8ef7, #6366f1); color: #fff;
+}
+.claire-bubble-wrap.assistant .claire-bubble-icon {
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4); color: #fff;
+}
 
 .claire-bubble {
-  max-width: 82%;
-  padding: 9px 13px;
-  border-radius: 16px;
-  font-size: 0.88rem;
-  line-height: 1.55;
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 0.875rem;
+  line-height: 1.6;
   word-break: break-word;
 }
 .claire-bubble-wrap.user .claire-bubble {
-  background: #007bff; color: #fff;
-  border-bottom-right-radius: 4px;
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+  box-shadow: 0 2px 12px rgba(79,142,247,0.28);
 }
 .claire-bubble-wrap.assistant .claire-bubble {
-  background: #fff; color: #333;
-  border: 1px solid #e9ecef;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 5px;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.06);
 }
 .claire-bubble-wrap.system .claire-bubble {
-  background: #e8f5e9; color: #2e7d32; font-size: 0.78rem;
-  border-radius: 8px; max-width: 95%; text-align: center;
+  background: linear-gradient(135deg, #d1fae5, #dcfce7);
+  color: #166534;
+  font-size: 0.78rem;
+  border-radius: 10px;
+  max-width: 95%;
+  text-align: center;
+  padding: 7px 14px;
+  border: 1px solid rgba(74,222,128,0.25);
 }
 
 /* Markdown inside bubbles */
-.claire-bubble p { margin: 0 0 6px 0; }
+.claire-bubble p { margin: 0 0 6px; }
 .claire-bubble p:last-child { margin-bottom: 0; }
 .claire-bubble ul, .claire-bubble ol { padding-left: 18px; margin: 4px 0; }
 .claire-bubble li { margin: 2px 0; }
-.claire-bubble pre { background: #1e1e1e; color: #d4d4d4; padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; margin: 6px 0; }
-.claire-bubble code { background: #e9ecef; padding: 1px 4px; border-radius: 3px; font-size: 0.83em; }
-.claire-bubble pre code { background: none; padding: 0; color: inherit; }
-.claire-bubble.claire-bubble-wrap.user p code { background: rgba(255,255,255,0.2); }
+.claire-bubble pre {
+  background: #1e293b; color: #e2e8f0;
+  padding: 10px; border-radius: 8px;
+  overflow-x: auto; font-size: 0.78rem; margin: 8px 0;
+}
+.claire-bubble code {
+  background: rgba(99,102,241,0.1); color: #4f46e5;
+  padding: 1px 5px; border-radius: 4px; font-size: 0.82em;
+}
+.claire-bubble pre code { background: none; padding: 0; color: #e2e8f0; }
+.claire-bubble-wrap.user .claire-bubble code { background: rgba(255,255,255,0.2); color: #fff; }
 .claire-bubble strong { font-weight: 600; }
 .claire-bubble h1,.claire-bubble h2,.claire-bubble h3 { font-size: 1em; font-weight: 700; margin: 8px 0 4px; }
+.claire-bubble table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 0.82rem; }
+.claire-bubble table th, .claire-bubble table td { border: 1px solid #e2e8f0; padding: 5px 8px; }
+.claire-bubble table th { background: #f1f5f9; font-weight: 600; }
 
-/* Typing indicator */
+/* ── Typing Indicator ── */
 .claire-typing {
-  display: flex; gap: 4px; align-items: center;
-  padding: 9px 13px;
-  background: #fff; border: 1px solid #e9ecef;
-  border-radius: 16px; border-bottom-left-radius: 4px;
+  display: flex; gap: 5px; align-items: center;
+  padding: 11px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px; border-bottom-left-radius: 5px;
   width: fit-content;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.06);
 }
 .claire-typing span {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #aaa; display: inline-block;
-  animation: claireTypingBounce 1.2s infinite;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #94a3b8; display: inline-block;
+  animation: claireTypingBounce 1.3s cubic-bezier(.4,0,.6,1) infinite;
 }
-.claire-typing span:nth-child(2) { animation-delay: 0.2s; }
-.claire-typing span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes claireTypingBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+.claire-typing span:nth-child(2) { animation-delay: 0.18s; }
+.claire-typing span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes claireTypingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
 
-/* Welcome message */
+/* ── Welcome Screen ── */
 .claire-welcome {
-  text-align: center; padding: 20px 10px;
+  text-align: center; padding: 28px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  animation: claireBubbleIn 0.4s ease both;
 }
-.claire-welcome i { font-size: 40px; color: #17a2b8; margin-bottom: 10px; }
-.claire-welcome p { font-size: 0.85rem; color: #666; margin: 4px 0; }
-.claire-welcome .claire-welcome-name { font-weight: 600; color: #333; font-size: 0.95rem; }
+.claire-welcome-icon {
+  width: 64px; height: 64px; border-radius: 20px;
+  background: linear-gradient(135deg, rgba(79,142,247,0.12), rgba(99,102,241,0.12));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 8px;
+}
+.claire-welcome-icon i { font-size: 30px; color: #4f8ef7; }
+.claire-welcome-name { font-weight: 700; color: #1e293b; font-size: 1rem; }
+.claire-welcome p { font-size: 0.83rem; color: #64748b; margin: 2px 0; line-height: 1.5; }
+.claire-welcome-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px;
+}
+.claire-chip {
+  padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;
+  background: rgba(79,142,247,0.09); color: #4f8ef7;
+  border: 1px solid rgba(79,142,247,0.2); cursor: default;
+}
 
-/* File upload bar */
+/* ── File Upload Bar ── */
 .claire-upload-bar {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 14px; background: #e8f5e9;
-  font-size: 0.8rem; color: #2e7d32; flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  background: linear-gradient(90deg, #f0fdf4, #dcfce7);
+  font-size: 0.79rem; color: #166534; flex-shrink: 0;
+  border-top: 1px solid rgba(74,222,128,0.2);
 }
-.claire-upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.claire-upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .claire-remove-file {
-  background: none; border: none; color: #dc3545;
-  font-size: 1rem; cursor: pointer; padding: 0 2px; line-height: 1;
+  background: none; border: none; color: #ef4444;
+  font-size: 1.1rem; cursor: pointer; padding: 0 3px; line-height: 1;
+  transition: transform 0.15s;
 }
+.claire-remove-file:hover { transform: scale(1.2); }
 
-/* Footer input area */
+/* ── Footer Input ── */
 .claire-footer {
-  display: flex; align-items: flex-end; gap: 6px;
-  padding: 10px 12px;
-  border-top: 1px solid #e9ecef;
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid #f1f5f9;
   background: #fff;
   flex-shrink: 0;
 }
 .claire-attach-btn {
-  background: none; border: none; color: #6c757d;
-  font-size: 15px; cursor: pointer; padding: 6px;
-  border-radius: 8px; flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  background: none; border: none; color: #94a3b8;
+  font-size: 15px; cursor: pointer; padding: 7px;
+  border-radius: 10px; flex-shrink: 0;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
-.claire-attach-btn:hover { background: #e9ecef; color: #333; }
+.claire-attach-btn:hover {
+  background: rgba(79,142,247,0.1);
+  color: #4f8ef7;
+  transform: scale(1.1);
+}
 .claire-input {
-  flex: 1; border: 1px solid #dee2e6; border-radius: 20px;
-  padding: 8px 14px; font-size: 0.87rem; line-height: 1.4;
-  resize: none; outline: none; max-height: 100px; overflow-y: auto;
-  background: #f8f9fa; transition: border-color 0.15s;
+  flex: 1;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  max-height: 110px;
+  overflow-y: auto;
+  background: #f8fafc;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   font-family: inherit;
+  color: #334155;
 }
-.claire-input:focus { border-color: #007bff; background: #fff; }
+.claire-input::placeholder { color: #94a3b8; }
+.claire-input:focus {
+  border-color: #4f8ef7;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(79,142,247,0.12);
+}
 .claire-send-btn {
-  background: #007bff; color: #fff; border: none;
-  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, #4f8ef7, #6366f1);
+  color: #fff; border: none;
+  width: 38px; height: 38px;
+  border-radius: 12px;
   font-size: 13px; cursor: pointer; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, transform 0.1s;
+  transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(79,142,247,0.3);
 }
-.claire-send-btn:hover { background: #0056b3; transform: scale(1.05); }
-.claire-send-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+.claire-send-btn:hover {
+  transform: scale(1.1) translateY(-1px);
+  box-shadow: 0 4px 16px rgba(79,142,247,0.45);
+}
+.claire-send-btn:active { transform: scale(0.95); }
+.claire-send-btn:disabled {
+  background: #e2e8f0; color: #94a3b8;
+  cursor: not-allowed; transform: none; box-shadow: none;
+}
 
-/* ==== Resize handle — top-left corner ==== */
+/* ── Resize Handle ── */
 .claire-resize-handle {
   position: absolute;
   top: 0;
@@ -933,5 +1051,6 @@ window.claireWidgetData = {
   }
 })();
 </script>
+{% endif %}
 {% endif %}
 

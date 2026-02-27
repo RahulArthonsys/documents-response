@@ -43,8 +43,13 @@ class ListUserView(AdminRequiredMixin, LoginRequiredMixin, TemplateView):
 
 class ListUserViewJson(AdminRequiredMixin, AjayDatatableView):
     model = User
-    columns = ['first_name', 'last_name', 'email', 'is_active', 'actions']
-    exclude_from_search_columns = ['actions']
+    column_defs = [
+        {'name': 'first_name', 'title': 'First Name', 'visible': True, 'searchable': True, 'orderable': True},
+        {'name': 'last_name',  'title': 'Last Name',  'visible': True, 'searchable': True, 'orderable': True},
+        {'name': 'email',      'title': 'Email',      'visible': True, 'searchable': True, 'orderable': True},
+        {'name': 'is_active',  'title': 'Status',     'visible': True, 'searchable': False, 'orderable': True},
+        {'name': 'actions',    'title': 'Actions',    'visible': True, 'searchable': False, 'orderable': False, 'placeholder': True, 'className': 'text-right'},
+    ]
     # extra_search_columns = ['']
 
     def get_initial_queryset(self):
@@ -53,17 +58,22 @@ class ListUserViewJson(AdminRequiredMixin, AjayDatatableView):
     def render_column(self, row, column):
         if column == 'is_active':
             if row.is_active:
-                return '<span class="badge badge-success">Active</span>'
+                return '<span class="badge" style="background:rgba(34,197,94,.12);color:#16a34a;font-weight:600;padding:4px 10px;border-radius:6px;font-size:.75rem;">Active</span>'
             else:
-                return '<span class="badge badge-danger">Inactive</span>'
+                return '<span class="badge" style="background:rgba(239,68,68,.1);color:#dc2626;font-weight:600;padding:4px 10px;border-radius:6px;font-size:.75rem;">Inactive</span>'
 
         if column == 'actions':
-            detail_action = '<a href={} role="button" class="btn btn-info btn-xs mr-1 text-white">Detail</a>'.format(
-                reverse('admin-user-detail', kwargs={'pk': row.pk}))
-            edit_action = '<a href={} role="button" class="btn btn-warning btn-xs mr-1 text-white">Edit</a>'.format(
-                reverse('admin-user-edit', kwargs={'pk': row.pk}))
-            delete_action = '<a href="javascript:;" class="remove_record btn btn-danger btn-xs" data-url={} role="button">Delete</a>'.format(
-                reverse('admin-user-delete', kwargs={'pk': row.pk}))
+            edit_action = (
+                '<a href="{}" class="btn btn-sm mr-1" '
+                'style="background:rgba(79,142,247,.1);color:#4f8ef7;border-radius:8px;font-size:.76rem;font-weight:600;padding:4px 12px;border:none;">'
+                '<i class="fas fa-pen" style="font-size:.68rem;margin-right:3px;"></i>Edit</a>'
+            ).format(reverse('admin-user-edit', kwargs={'pk': row.pk}))
+            delete_action = (
+                '<a href="javascript:;" class="remove_record btn btn-sm" '
+                'data-url="{}" '
+                'style="background:rgba(239,68,68,.1);color:#ef4444;border-radius:8px;font-size:.76rem;font-weight:600;padding:4px 12px;border:none;">'
+                '<i class="fas fa-trash-alt" style="font-size:.68rem;margin-right:3px;"></i>Delete</a>'
+            ).format(reverse('admin-user-delete', kwargs={'pk': row.pk}))
             return edit_action + delete_action
         else:
             return super(ListUserViewJson, self).render_column(row, column)

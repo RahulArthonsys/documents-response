@@ -18,20 +18,36 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────
-# 1. OpenAI Client — singleton
-# ──────────────────────────────────────────────────────────
-try:
-    from openai import OpenAI
-    _api_key = getattr(settings, 'OPENAI_API_KEY', None) or os.environ.get('OPENAI_API_KEY', '')
-    if _api_key:
-        client = OpenAI(api_key=_api_key)
-        logger.info("OpenAI client initialized successfully")
-    else:
-        client = None
-        logger.warning("OPENAI_API_KEY not set — embeddings will be disabled")
-except Exception as e:
-    logger.error(f"Failed to initialize OpenAI client: {e}")
-    client = None
+# 1. Gemini API Key — singleton
+# ────────────────────────────────────────────────────────
+GEMINI_EMBEDDING_MODEL = "models/gemini-embedding-001"
+GEMINI_EMBEDDING_DIM = 3072
+
+_gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None) or os.environ.get('GEMINI_API_KEY', '')
+client = None  # kept for backward-compat references
+
+if _gemini_api_key:
+    logger.info("Gemini API key loaded successfully")
+else:
+    logger.warning("GEMINI_API_KEY not set — embeddings will be disabled")
+
+
+# Singleton LangChain embeddings object (uses v1 API, not v1beta)
+_lc_embeddings = None
+
+
+def get_lc_embeddings():
+    """Return singleton langchain_google_genai.GoogleGenerativeAIEmbeddings."""
+    global _lc_embeddings
+    if _lc_embeddings is None:
+        if not _gemini_api_key:
+            raise ValueError("GEMINI_API_KEY not set")
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        _lc_embeddings = GoogleGenerativeAIEmbeddings(
+            model=GEMINI_EMBEDDING_MODEL,
+            google_api_key=_gemini_api_key,
+        )
+    return _lc_embeddings
 
 
 # ──────────────────────────────────────────────────────────
@@ -65,101 +81,115 @@ def get_chroma_client():
 # ──────────────────────────────────────────────────────────
 # 3. Custom ChromaDB Embedding Function
 # ──────────────────────────────────────────────────────────
-class OpenAIEmbeddingFunction:
-    """Custom embedding function for ChromaDB using OpenAI text-embedding-3-large.
+class GeminiEmbeddingFunction:
+    """Custom embedding function for ChromaDB using Gemini gemini-embedding-001.
     Produces 3072-dimension vectors."""
 
     def __init__(self):
-        self._model = "text-embedding-3-large"
-        self._dimension = 3072
+        self._model = GEMINI_EMBEDDING_MODEL
+        self._dimension = GEMINI_EMBEDDING_DIM
 
     def name(self) -> str:
-        return "openai-text-embedding-3-large"
+        return "gemini-embedding-001"
 
     def __call__(self, input: List[str]) -> List[List[float]]:
         """Called by ChromaDB when it needs embeddings for documents or queries."""
-        if client is None:
-            raise ValueError("OpenAI client not initialized. Set OPENAI_API_KEY.")
-        response = client.embeddings.create(model=self._model, input=input)
-        return [item.embedding for item in response.data]
+        return get_lc_embeddings().embed_documents(input)
 
 
-_openai_embedding_function = None
+_gemini_embedding_function = None
 
 
 def get_openai_embedding_function():
-    """Get or create the singleton OpenAI embedding function."""
-    global _openai_embedding_function
-    if _openai_embedding_function is None:
-        _openai_embedding_function = OpenAIEmbeddingFunction()
-    return _openai_embedding_function
+    """Get or create the singleton Gemini embedding function (name kept for backward compat)."""
+    global _gemini_embedding_function
+    if _gemini_embedding_function is None:
+        _gemini_embedding_function = GeminiEmbeddingFunction()
+    return _gemini_embedding_function
 
 
 # ──────────────────────────────────────────────────────────
 # 4. Single & Batch Embedding Generation
 # ──────────────────────────────────────────────────────────
-def generate_openai_embedding(text: str) -> List[float]:
-    """Generate a single 3072-dim embedding vector."""
-    if client is None:
-        raise ValueError("OpenAI client not initialized")
-    response = client.embeddings.create(
-        model="text-embedding-3-large",
-        input=text
-    )
-    return response.data[0].embedding
+def generate_gemini_embedding(text: str) -> List[float]:
+    """Generate a single 3072-dim embedding vector using Gemini gemini-embedding-001."""
+    return get_lc_embeddings().embed_query(text)
 
 
-def generate_openai_embeddings_batch(texts: List[str], batch_size: int = 100) -> List[List[float]]:
-    """Generate embeddings in batches of 100 to respect API rate limits."""
-    if client is None:
-        raise ValueError("OpenAI client not initialized")
+# Alias for backward compatibility
+generate_openai_embedding = generate_gemini_embedding
 
+
+def generate_gemini_embeddings_batch(texts: List[str], batch_size: int = 100) -> List[List[float]]:
+    """Generate Gemini embeddings in batches."""
+    lc_emb = get_lc_embeddings()
     all_embeddings = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         try:
-            response = client.embeddings.create(
-                model="text-embedding-3-large",
-                input=batch
-            )
-            batch_embeddings = [item.embedding for item in response.data]
+            batch_embeddings = lc_emb.embed_documents(batch)
             all_embeddings.extend(batch_embeddings)
             logger.info(f"Embedded batch {i // batch_size + 1} ({len(batch)} texts)")
         except Exception as e:
             logger.error(f"Batch embedding error at index {i}: {e}")
-            # Fill with zero vectors to maintain alignment
-            all_embeddings.extend([[0.0] * 3072] * len(batch))
+            all_embeddings.extend([[0.0] * GEMINI_EMBEDDING_DIM] * len(batch))
     return all_embeddings
+
+
+# Alias for backward compatibility
+generate_openai_embeddings_batch = generate_gemini_embeddings_batch
 
 
 # ──────────────────────────────────────────────────────────
 # 5. ChromaDB Collections
 # ──────────────────────────────────────────────────────────
-def get_or_create_collection():
-    """Get/create the 'documents' knowledge base collection with OpenAI embeddings."""
-    chroma_client = get_chroma_client()
-    embedding_fn = get_openai_embedding_function()
-
+def _collection_has_wrong_dims(collection, expected_dim: int = GEMINI_EMBEDDING_DIM) -> bool:
+    """Return True if the collection's stored vectors have different dimensions."""
     try:
-        collection = chroma_client.get_or_create_collection(
+        if collection.count() == 0:
+            return False
+        # Peek at one stored embedding
+        peek = collection.get(limit=1, include=["embeddings"])
+        embeddings = peek.get("embeddings")
+        if embeddings and len(embeddings) > 0 and embeddings[0] is not None:
+            stored_dim = len(embeddings[0])
+            if stored_dim != expected_dim:
+                logger.warning(
+                    f"Collection '{collection.name}' has dim={stored_dim}, "
+                    f"expected {expected_dim} — will recreate."
+                )
+                return True
+    except Exception as e:
+        logger.warning(f"Dim check failed for '{collection.name}': {e}")
+    return False
+
+
+def get_or_create_collection():
+    """Get/create the 'documents' knowledge base collection with Gemini embeddings.
+    Deletes and recreates if embedding dimensions conflict."""
+    chroma_client = get_chroma_client()
+    embedding_fn = get_openai_embedding_function()  # returns GeminiEmbeddingFunction
+
+    def _make_collection():
+        return chroma_client.get_or_create_collection(
             name="documents",
             embedding_function=embedding_fn,
             metadata={"hnsw:space": "cosine"}
         )
+
+    try:
+        collection = _make_collection()
+        if _collection_has_wrong_dims(collection):
+            chroma_client.delete_collection("documents")
+            collection = _make_collection()
         return collection
-    except Exception as embed_conflict:
-        if "embedding function" in str(embed_conflict).lower():
-            logger.warning("Embedding function conflict — recreating 'documents' collection")
-            try:
-                chroma_client.delete_collection("documents")
-            except Exception:
-                pass
-            return chroma_client.get_or_create_collection(
-                name="documents",
-                embedding_function=embedding_fn,
-                metadata={"hnsw:space": "cosine"}
-            )
-        raise
+    except Exception as conflict:
+        logger.warning(f"Collection conflict for 'documents' — recreating: {conflict}")
+        try:
+            chroma_client.delete_collection("documents")
+        except Exception:
+            pass
+        return _make_collection()
 
 
 def get_session_collection_name(conversation_id: int) -> str:
@@ -168,31 +198,32 @@ def get_session_collection_name(conversation_id: int) -> str:
 
 
 def get_or_create_session_collection(conversation_id: int):
-    """Get or create a session-specific ChromaDB collection with OpenAI embeddings."""
+    """Get or create a session-specific ChromaDB collection with Gemini embeddings.
+    Deletes and recreates on dimension conflict."""
     chroma_client = get_chroma_client()
     collection_name = get_session_collection_name(conversation_id)
-    embedding_fn = get_openai_embedding_function()
+    embedding_fn = get_openai_embedding_function()  # returns GeminiEmbeddingFunction
 
-    try:
-        collection = chroma_client.get_or_create_collection(
+    def _make_collection():
+        return chroma_client.get_or_create_collection(
             name=collection_name,
             embedding_function=embedding_fn,
             metadata={"hnsw:space": "cosine"}
         )
+
+    try:
+        collection = _make_collection()
+        if _collection_has_wrong_dims(collection):
+            chroma_client.delete_collection(collection_name)
+            collection = _make_collection()
         return collection
-    except Exception as embed_conflict:
-        if "embedding function" in str(embed_conflict).lower():
-            logger.warning(f"Embedding function conflict for {collection_name} — recreating")
-            try:
-                chroma_client.delete_collection(collection_name)
-            except Exception:
-                pass
-            return chroma_client.get_or_create_collection(
-                name=collection_name,
-                embedding_function=embedding_fn,
-                metadata={"hnsw:space": "cosine"}
-            )
-        raise
+    except Exception as conflict:
+        logger.warning(f"Collection conflict for {collection_name} — recreating: {conflict}")
+        try:
+            chroma_client.delete_collection(collection_name)
+        except Exception:
+            pass
+        return _make_collection()
 
 
 # ──────────────────────────────────────────────────────────
@@ -536,7 +567,7 @@ def index_document_embeddings(collection, document, chunks=None):
         document.embedding_metadata = json.dumps({
             "chunk_count": len(chunks),
             "status": "indexed",
-            "embedding_model": "text-embedding-3-large",
+            "embedding_model": "gemini-embedding-001",
             "indexed_at": datetime.now().isoformat()
         })
         document.is_processed = True

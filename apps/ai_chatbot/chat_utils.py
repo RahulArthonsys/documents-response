@@ -23,13 +23,9 @@ logger = logging.getLogger(__name__)
 tokenizer = None
 try:
     import tiktoken
-    tokenizer = tiktoken.encoding_for_model("gpt-4o")
+    tokenizer = tiktoken.get_encoding("cl100k_base")
 except Exception:
-    try:
-        import tiktoken
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-    except Exception:
-        pass
+    pass
 
 
 def estimate_token_count(text):

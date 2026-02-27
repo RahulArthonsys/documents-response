@@ -25,6 +25,10 @@ pretty-html-table
 tqdm
 openai
 
+# Gemini / Google AI
+google-generativeai
+langchain-google-genai
+
 # AI Interview dependencies
 PyPDF2
 sentence-transformers

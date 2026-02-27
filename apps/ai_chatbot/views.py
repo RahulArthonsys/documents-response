@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════════════════════
-# 1. OpenAI / LangChain Singletons
+# 1. Gemini / LangChain Singletons
 # ══════════════════════════════════════════════════════════
 _llm = None
 _detection_llm = None
@@ -48,21 +48,21 @@ _embeddings = None
 
 
 def _get_api_key():
-    return getattr(settings, 'OPENAI_API_KEY', '') or os.environ.get('OPENAI_API_KEY', '')
+    return getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
 
 
 def get_llm():
-    """Singleton ChatOpenAI (gpt-4o) — main response generation + agent."""
+    """Singleton ChatGoogleGenerativeAI (gemini-2.5-flash) — main response generation + agent."""
     global _llm
     if _llm is None:
         try:
-            from langchain_openai import ChatOpenAI
-            _llm = ChatOpenAI(
-                model="gpt-4o",
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            _llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
                 temperature=0.3,
-                openai_api_key=_get_api_key(),
+                google_api_key=_get_api_key(),
                 streaming=True,
-                max_tokens=4096,
+                max_output_tokens=4096,
             )
         except Exception as e:
             logger.error(f"Failed to create LLM: {e}")
@@ -71,16 +71,16 @@ def get_llm():
 
 
 def get_detection_llm():
-    """Singleton ChatOpenAI (gpt-4o) — lightweight YES/NO detection gate."""
+    """Singleton ChatGoogleGenerativeAI (gemini-2.5-flash) — lightweight YES/NO detection gate."""
     global _detection_llm
     if _detection_llm is None:
         try:
-            from langchain_openai import ChatOpenAI
-            _detection_llm = ChatOpenAI(
-                model="gpt-4o",
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            _detection_llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
                 temperature=0,
-                openai_api_key=_get_api_key(),
-                max_tokens=10,
+                google_api_key=_get_api_key(),
+                max_output_tokens=10,
             )
         except Exception as e:
             logger.error(f"Failed to create detection LLM: {e}")
@@ -89,14 +89,14 @@ def get_detection_llm():
 
 
 def get_embeddings():
-    """Singleton OpenAIEmbeddings (text-embedding-3-large, 3072 dims)."""
+    """Singleton GoogleGenerativeAIEmbeddings (gemini-embedding-001, 3072 dims)."""
     global _embeddings
     if _embeddings is None:
         try:
-            from langchain_openai import OpenAIEmbeddings
-            _embeddings = OpenAIEmbeddings(
-                model="text-embedding-3-large",
-                openai_api_key=_get_api_key(),
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            _embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/gemini-embedding-001",
+                google_api_key=_get_api_key(),
             )
         except Exception as e:
             logger.error(f"Failed to create embeddings: {e}")
@@ -116,7 +116,7 @@ CAPABILITIES:
 - Use Markdown formatting for clear, structured responses
 
 ENHANCED RAG SYSTEM:
-- All knowledge searches use GPT-4o query classification and dual retrieval
+- All knowledge searches use Gemini 2.5 Flash query classification and dual retrieval
 - Query types (metric/theoretical/global/natural/mixed) are automatically detected
 - Session documents have ABSOLUTE PRIORITY over knowledge base when available
 
@@ -135,7 +135,7 @@ CRITICAL RESPONSE RULES:
 # ══════════════════════════════════════════════════════════
 
 def classify_query_type(query: str) -> str:
-    """Classify query type using GPT-4o for tailored retrieval strategy.
+    """Classify query type using Gemini 2.5 Flash for tailored retrieval strategy.
 
     Categories:
       metric — numbers, statistics, KPIs
@@ -145,26 +145,27 @@ def classify_query_type(query: str) -> str:
       mixed — combines multiple categories
     """
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
-        resp = client.chat.completions.create(
-            model="gpt-4o",
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import SystemMessage, HumanMessage
+        clf_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0,
-            max_tokens=20,
-            messages=[
-                {"role": "system", "content": (
-                    "Classify the user query into exactly one category:\n"
-                    "1. 'metric' — Asking for specific numbers, statistics, KPIs, calculations\n"
-                    "2. 'theoretical' — Asking for explanations, definitions, concepts\n"
-                    "3. 'global' — Broad summary or overview requests\n"
-                    "4. 'natural' — Conversational, greeting, thanks, off-topic\n"
-                    "5. 'mixed' — Combines elements from multiple categories\n\n"
-                    "Respond with ONLY the category word."
-                )},
-                {"role": "user", "content": query},
-            ]
+            google_api_key=_get_api_key(),
+            max_output_tokens=20,
         )
-        classification = resp.choices[0].message.content.strip().lower()
+        resp = clf_llm.invoke([
+            SystemMessage(content=(
+                "Classify the user query into exactly one category:\n"
+                "1. 'metric' — Asking for specific numbers, statistics, KPIs, calculations\n"
+                "2. 'theoretical' — Asking for explanations, definitions, concepts\n"
+                "3. 'global' — Broad summary or overview requests\n"
+                "4. 'natural' — Conversational, greeting, thanks, off-topic\n"
+                "5. 'mixed' — Combines elements from multiple categories\n\n"
+                "Respond with ONLY the category word."
+            )),
+            HumanMessage(content=query),
+        ])
+        classification = resp.content.strip().lower()
         valid = {'metric', 'theoretical', 'global', 'natural', 'mixed'}
         return classification if classification in valid else 'mixed'
     except Exception as e:
@@ -173,7 +174,7 @@ def classify_query_type(query: str) -> str:
 
 
 def detect_is_question(query: str, has_session_document: bool = False) -> bool:
-    """GPT-4o detection gate: does this query need document search (YES/NO)?
+    """Gemini 2.5 Flash detection gate: does this query need document search (YES/NO)?
 
     Decision Matrix:
       YES + session docs → session_document_search() direct
@@ -202,15 +203,16 @@ Answer NO (general chat) if:
 
 Answer (YES or NO):"""
 
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
-        resp = client.chat.completions.create(
-            model="gpt-4o",
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage
+        det_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0,
-            max_tokens=5,
-            messages=[{"role": "user", "content": detection_prompt}]
+            google_api_key=_get_api_key(),
+            max_output_tokens=5,
         )
-        answer = resp.choices[0].message.content.strip().upper()
+        resp = det_llm.invoke([HumanMessage(content=detection_prompt)])
+        answer = resp.content.strip().upper()
         return 'YES' in answer
     except Exception:
         return True  # Default to treating as question
@@ -225,7 +227,7 @@ def dual_retrieval_search(query: str, query_type: str = None, top_k: int = 15) -
 
     Pipeline:
       [Query] → [Classify Type]
-             → [Strategy 1: Semantic Search (OpenAI embeddings, 3072 dim)]
+             → [Strategy 1: Semantic Search (Gemini embeddings, 768 dim)]
              → [Strategy 2: Metadata-Filtered Search (tables for metric queries)]
              → [Strategy 3: Enhanced Query Search (augmented query)]
              → [Deduplicate & Sort by Distance]
@@ -298,7 +300,7 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
     """STRICT Document-Only Knowledge Base Search with Query Classification and RAG.
 
     Pipeline:
-      [Query] → [classify_query_type()] → [dual_retrieval_search()] → [Build Context] → [GPT-4o RAG] → [Answer]
+      [Query] → [classify_query_type()] → [dual_retrieval_search()] → [Build Context] → [Gemini 2.5 Flash RAG] → [Answer]
     """
     # Step 1: Classify query type
     query_type = classify_query_type(query)
@@ -346,27 +348,30 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
     )
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        rag_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.3,
+            google_api_key=_get_api_key(),
+            max_output_tokens=4096,
+        )
 
         # Build conversation history for context
-        messages_list = [{"role": "system", "content": rag_prompt}]
+        messages_list = [SystemMessage(content=rag_prompt)]
         if conversation:
             recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
             recent_msgs.reverse()
             for m in recent_msgs:
-                if m.role in ("user", "assistant"):
-                    messages_list.append({"role": m.role, "content": m.content})
+                if m.role == "user":
+                    messages_list.append(HumanMessage(content=m.content))
+                elif m.role == "assistant":
+                    messages_list.append(AIMessage(content=m.content))
 
-        messages_list.append({"role": "user", "content": query})
+        messages_list.append(HumanMessage(content=query))
 
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.3,
-            max_tokens=4096,
-            messages=messages_list,
-        )
-        return resp.choices[0].message.content.strip()
+        resp = rag_llm.invoke(messages_list)
+        return resp.content.strip()
     except Exception as e:
         logger.error(f"knowledge_base_search_tool error: {e}")
         return f"Error generating response: {e}"
@@ -380,7 +385,7 @@ def session_document_search(query: str, conversation_id: int, specific_document:
     """SMART DOCUMENT SEARCH — Search uploaded session documents with intelligent routing.
 
     Pipeline:
-      [Query] → [search_session_documents()] → [Build Context] → [GPT-4o RAG] → [Answer]
+      [Query] → [search_session_documents()] → [Build Context] → [Gemini 2.5 Flash RAG] → [Answer]
 
     Priority: ABSOLUTE — overrides knowledge_base_search_tool when session docs exist.
     """
@@ -430,18 +435,19 @@ def session_document_search(query: str, conversation_id: int, specific_document:
     )
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
-        resp = client.chat.completions.create(
-            model="gpt-4o",
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import SystemMessage, HumanMessage
+        sess_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0.3,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": comprehensive_prompt},
-                {"role": "user", "content": query},
-            ]
+            google_api_key=_get_api_key(),
+            max_output_tokens=4096,
         )
-        return resp.choices[0].message.content.strip()
+        resp = sess_llm.invoke([
+            SystemMessage(content=comprehensive_prompt),
+            HumanMessage(content=query),
+        ])
+        return resp.content.strip()
     except Exception as e:
         logger.error(f"session_document_search error: {e}")
         return ""
@@ -576,7 +582,7 @@ def stream_agent_response(query: str, conversation: 'Conversation') -> str:
 
     Flow:
       [User Question]
-        → [GPT-4o Detection Gate: YES/NO]
+        → [Gemini 2.5 Flash Detection Gate: YES/NO]
           → YES + session docs → session_document_search() (direct, Priority 1)
           → YES + no session docs → knowledge_base_search_tool() (direct, Priority 2)
           → NO → LangChain Agent (routes to appropriate tool)
@@ -586,7 +592,7 @@ def stream_agent_response(query: str, conversation: 'Conversation') -> str:
         conversation=conversation, is_processed=True
     ).exists()
 
-    # ── GPT-4o Detection Gate ──
+    # ── Gemini 2.5 Flash Detection Gate ──
     is_question = detect_is_question(query, has_session_document=has_session_docs)
 
     if is_question:
@@ -631,10 +637,16 @@ def stream_agent_response(query: str, conversation: 'Conversation') -> str:
 
 
 def _general_chat_response(query: str, conversation: 'Conversation') -> str:
-    """Fallback: plain GPT-4o chat without document context."""
+    """Fallback: plain Gemini 2.5 Flash chat without document context."""
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        chat_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.4,
+            google_api_key=_get_api_key(),
+            max_output_tokens=4096,
+        )
 
         config = AgentPromptConfig.objects.first()
         system_prompt = SYSTEM_PROMPT
@@ -644,19 +656,16 @@ def _general_chat_response(query: str, conversation: 'Conversation') -> str:
         recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
         recent_msgs.reverse()
 
-        chat_history = [{"role": "system", "content": system_prompt}]
+        chat_history = [SystemMessage(content=system_prompt)]
         for m in recent_msgs:
-            if m.role in ("user", "assistant"):
-                chat_history.append({"role": m.role, "content": m.content})
-        chat_history.append({"role": "user", "content": query})
+            if m.role == "user":
+                chat_history.append(HumanMessage(content=m.content))
+            elif m.role == "assistant":
+                chat_history.append(AIMessage(content=m.content))
+        chat_history.append(HumanMessage(content=query))
 
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.4,
-            max_tokens=4096,
-            messages=chat_history,
-        )
-        return resp.choices[0].message.content.strip()
+        resp = chat_llm.invoke(chat_history)
+        return resp.content.strip()
     except Exception as e:
         logger.error(f"General chat error: {e}")
         return f"I'm sorry, I encountered an error: {e}"
@@ -671,11 +680,11 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
 
     Flow:
       [Start Event]
-        → [GPT-4o Detection Gate]
+        → [Gemini 2.5 Flash Detection Gate]
           → YES + session docs → Search session collection, build context
           → YES + no session docs → Dual retrieval KB search, build context
           → NO → General chat prompt
-        → [Stream Tokens via OpenAI]
+        → [Stream Tokens via Gemini]
         → [Save Message]
         → [Done Event]
     """
@@ -687,11 +696,18 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
             conversation=conversation, is_processed=True
         ).exists()
 
-        # GPT-4o Detection Gate
+        # Gemini 2.5 Flash Detection Gate
         is_question = detect_is_question(query, has_session_document=has_session_docs)
 
-        from openai import OpenAI
-        client = OpenAI(api_key=_get_api_key())
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        stream_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.3,
+            google_api_key=_get_api_key(),
+            max_output_tokens=4096,
+            streaming=True,
+        )
 
         # ── Build context based on detection result ──
         session_context = ""
@@ -761,25 +777,19 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
         recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
         recent_msgs.reverse()
 
-        chat_history = [{"role": "system", "content": system_msg}]
+        chat_history = [SystemMessage(content=system_msg)]
         for m in recent_msgs:
-            if m.role in ("user", "assistant"):
-                chat_history.append({"role": m.role, "content": m.content})
-        chat_history.append({"role": "user", "content": query})
+            if m.role == "user":
+                chat_history.append(HumanMessage(content=m.content))
+            elif m.role == "assistant":
+                chat_history.append(AIMessage(content=m.content))
+        chat_history.append(HumanMessage(content=query))
 
-        # Stream response via OpenAI
+        # Stream response via Gemini
         full_response = ""
-        stream = client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.3,
-            max_tokens=4096,
-            messages=chat_history,
-            stream=True,
-        )
-
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
+        for chunk in stream_llm.stream(chat_history):
+            token = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            if token:
                 full_response += token
                 escaped = json.dumps(token)
                 yield f"data: {{\"type\": \"token\", \"content\": {escaped}}}\n\n"

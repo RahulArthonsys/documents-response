@@ -3,6 +3,7 @@ import json
 from datetime import date
 from random import randint
 
+from django.db.models import Sum
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
@@ -98,6 +99,15 @@ class AdminDashboardView(AdminRequiredMixin, LoginRequiredMixin, View):
         ).count()
         recent_plans = SubscriptionPlan.objects.order_by('-created_at')[:5]
 
+        # Monthly revenue (sum of active subscription plan prices)
+        monthly_revenue_raw = UserSubscription.objects.filter(
+            is_active=True, end_date__gte=timezone.now().date()
+        ).aggregate(total=Sum('plan__price'))['total'] or 0
+        monthly_revenue = f"${monthly_revenue_raw / 1000:.1f}K" if monthly_revenue_raw >= 1000 else f"${monthly_revenue_raw:.0f}"
+
+        # Churn rate
+        churn_rate = round((inactive_users_count / users_count * 100), 1) if users_count > 0 else 0
+
         # Recent users
         recent_users = User.objects.filter(is_staff=False, is_superuser=False).order_by('-date_joined')[:10]
 
@@ -130,6 +140,8 @@ class AdminDashboardView(AdminRequiredMixin, LoginRequiredMixin, View):
             'active_plans_count': active_plans_count,
             'active_subs_count': active_subs_count,
             'recent_plans': recent_plans,
+            'monthly_revenue': monthly_revenue,
+            'churn_rate': churn_rate,
         }
         return render(request, 'administrator/dashboard.html', context)
 

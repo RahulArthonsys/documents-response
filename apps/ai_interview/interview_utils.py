@@ -93,19 +93,26 @@ def _chunk_text(text, chunk_size=500, overlap=50):
 # ──────────────────────────────────────────
 
 def _get_api_key():
-    return getattr(settings, 'OPENAI_API_KEY', '') or os.environ.get('OPENAI_API_KEY', '')
+    return getattr(settings, 'OPENROUTER_API_KEY', '') or os.environ.get('OPENROUTER_API_KEY', '')
+
+def _get_openrouter_base_url():
+    return getattr(settings, 'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
+
+def _get_openrouter_model():
+    return getattr(settings, 'OPENROUTER_MODEL', 'mistralai/mistral-small-3.1-24b-instruct:free')
 
 
 def generate_interview_questions(resume_text, num_questions=5):
-    """Generate interview questions from resume using OpenAI."""
+    """Generate interview questions from resume using OpenRouter (Mistral)."""
     try:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage
 
         llm = ChatOpenAI(
-            model="gpt-4o",
+            model=_get_openrouter_model(),
             temperature=0.5,
             openai_api_key=_get_api_key(),
+            openai_api_base=_get_openrouter_base_url(),
             max_tokens=2048,
         )
 
@@ -189,15 +196,16 @@ def transcribe_audio(audio_file_path):
 # ──────────────────────────────────────────
 
 def evaluate_answer(question_text, answer_text, resume_context=""):
-    """Evaluate candidate's answer using LLM. Returns dict with scores and feedback."""
+    """Evaluate candidate's answer using OpenRouter (Mistral). Returns dict with scores and feedback."""
     try:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage
 
         llm = ChatOpenAI(
-            model="gpt-4o",
+            model=_get_openrouter_model(),
             temperature=0.3,
             openai_api_key=_get_api_key(),
+            openai_api_base=_get_openrouter_base_url(),
             max_tokens=1024,
         )
 
@@ -290,9 +298,10 @@ def generate_overall_feedback(interview):
             qa_text += f"Feedback: {ans.feedback}\n"
 
         llm = ChatOpenAI(
-            model="gpt-4o",
+            model=_get_openrouter_model(),
             temperature=0.3,
             openai_api_key=_get_api_key(),
+            openai_api_base=_get_openrouter_base_url(),
             max_tokens=1024,
         )
 

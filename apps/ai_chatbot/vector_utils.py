@@ -144,11 +144,30 @@ generate_openai_embeddings_batch = generate_gemini_embeddings_batch
 # 5. ChromaDB Collections
 # ──────────────────────────────────────────────────────────
 def _collection_has_wrong_dims(collection, expected_dim: int = GEMINI_EMBEDDING_DIM) -> bool:
-    """Return True if the collection's stored vectors have different dimensions."""
+    """Return True if the collection's embedding dimension doesn't match expected_dim.
+
+    Checks (in order):
+      1. 'embedding_dim' stored in collection metadata (most reliable)
+      2. Peek at an actual stored embedding vector
+    Returns False (safe) if the collection is empty or the check cannot be performed.
+    """
     try:
+        # 1. Metadata-based check (fast, reliable)
+        meta = collection.metadata or {}
+        stored_meta_dim = meta.get("embedding_dim")
+        if stored_meta_dim is not None:
+            stored_meta_dim = int(stored_meta_dim)
+            if stored_meta_dim != expected_dim:
+                logger.warning(
+                    f"Collection '{collection.name}' metadata dim={stored_meta_dim}, "
+                    f"expected {expected_dim} — will recreate."
+                )
+                return True
+            return False  # metadata matches — trust it
+
+        # 2. Fallback: peek at a stored embedding vector
         if collection.count() == 0:
             return False
-        # Peek at one stored embedding
         peek = collection.get(limit=1, include=["embeddings"])
         embeddings = peek.get("embeddings")
         if embeddings and len(embeddings) > 0 and embeddings[0] is not None:
@@ -174,7 +193,7 @@ def get_or_create_collection():
         return chroma_client.get_or_create_collection(
             name="documents",
             embedding_function=embedding_fn,
-            metadata={"hnsw:space": "cosine"}
+            metadata={"hnsw:space": "cosine", "embedding_dim": GEMINI_EMBEDDING_DIM}
         )
 
     try:
@@ -208,7 +227,7 @@ def get_or_create_session_collection(conversation_id: int):
         return chroma_client.get_or_create_collection(
             name=collection_name,
             embedding_function=embedding_fn,
-            metadata={"hnsw:space": "cosine"}
+            metadata={"hnsw:space": "cosine", "embedding_dim": GEMINI_EMBEDDING_DIM}
         )
 
     try:

@@ -229,8 +229,8 @@ APPEND_SLASH = False
 
 # ##### AI / OPENROUTER CONFIGURATION #########################
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyBsa5Fda2pAmKaiqhep3DgfmVNVa5RT-bI')
-OPENROUTER_API_KEY = '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'
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyCvRTzBvYHJifvJe7fu8_XClC088BeN41o')
+OPENROUTER_API_KEY = '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'
 OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 OPENROUTER_MODEL = 'mistralai/mistral-small-3.1-24b-instruct:free'
 

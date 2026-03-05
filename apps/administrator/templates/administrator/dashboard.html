@@ -2,432 +2,440 @@
 {% load static %}
 
 {% block body %}
-<!-- Inject Django data for React -->
+<!-- Dashboard Data -->
 <script>
 window.__DASHBOARD__ = {
-  usersCount: {{ users_count|default:"0" }},
-  activeUsersCount: {{ active_users_count|default:"0" }},
-  newUsersCount: {{ new_users_count|default:"0" }},
-  inactiveUsersCount: {{ inactive_users_count|default:"0" }},
-  plansCount: {{ plans_count|default:"0" }},
-  activePlansCount: {{ active_plans_count|default:"0" }},
-  activeSubsCount: {{ active_subs_count|default:"0" }},
-  chartLabels: {{ chart_labels|safe }},
-  chartValues: {{ chart_values|safe }},
+  usersCount:        {{ users_count|default:"0" }},
+  activeUsersCount:  {{ active_users_count|default:"0" }},
+  newUsersCount:     {{ new_users_count|default:"0" }},
+  inactiveUsersCount:{{ inactive_users_count|default:"0" }},
+  plansCount:        {{ plans_count|default:"0" }},
+  activePlansCount:  {{ active_plans_count|default:"0" }},
+  activeSubsCount:   {{ active_subs_count|default:"0" }},
+  monthlyRevenue:    "{{ monthly_revenue|default:'$0' }}",
+  churnRate:         "{{ churn_rate|default:'0' }}%",
+  chartLabels:       {{ chart_labels|safe }},
+  chartValues:       {{ chart_values|safe }},
   recentPlans: [
     {% for plan in recent_plans %}
     {
       id: {{ plan.pk }},
       name: "{{ plan.name|escapejs }}",
       price: "{{ plan.price }}",
-      duration: "{{ plan.get_duration_days_display|escapejs }}",
       subscribers: {{ plan.subscriptions.count }},
       isActive: {% if plan.is_active %}true{% else %}false{% endif %},
-      editUrl: "{% url 'admin-subscription-plan-edit' plan.pk %}"
-    }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-  ],
-  recentUsers: [
-    {% for u in recent_users %}
-    {
-      id: {{ u.pk }},
-      name: "{{ u.get_full_name|default:'-'|escapejs }}",
-      email: "{{ u.email|escapejs }}",
-      dateJoined: "{{ u.date_joined|date:'d M Y' }}",
-      isActive: {% if u.is_active %}true{% else %}false{% endif %},
-      detailUrl: "{% url 'admin-user-detail' u.pk %}",
-      editUrl: "{% url 'admin-user-edit' u.pk %}"
+      editUrl: "{% url 'admin-subscription-plan-edit' plan.pk %}",
+      deleteUrl: "{% url 'admin-subscription-plan-delete' plan.pk %}"
     }{% if not forloop.last %},{% endif %}
     {% endfor %}
   ],
   urls: {
     userList: "{% url 'admin-user-list' %}",
-    userAdd: "{% url 'admin-user-add' %}",
+    userAdd:  "{% url 'admin-user-add' %}",
     planList: "{% url 'admin-subscription-plan-list' %}",
-    planAdd: "{% url 'admin-subscription-plan-add' %}",
+    planAdd:  "{% url 'admin-subscription-plan-add' %}"
   }
 };
 </script>
 
-<!-- React mount point -->
-<div id="nova-dashboard-root"></div>
+<style>
+/* Dashboard Reset & Base */
+.dash-wrap {
+  padding: 28px 32px;
+  background: #f4f6f9;
+  min-height: 100vh;
+  font-family: 'Inter', 'Source Sans Pro', sans-serif;
+}
+/* Page Header */
+.dash-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.dash-greeting h1 {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #1a2035;
+  margin: 0 0 4px 0;
+}
+.dash-greeting p {
+  font-size: 0.84rem;
+  color: #6b7280;
+  margin: 0;
+}
+.dash-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.dash-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border-radius: 8px; font-size: 0.83rem;
+  font-weight: 600; cursor: pointer; border: none;
+  text-decoration: none; white-space: nowrap; transition: all .18s ease;
+}
+.dash-btn-primary { background: #1a2035; color: #fff; }
+.dash-btn-primary:hover { background: #2d3555; color: #fff; text-decoration: none; }
+.dash-btn-outline { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
+.dash-btn-outline:hover { background: #f3f4f6; text-decoration: none; color: #374151; }
+/* Stat Grid */
+.dash-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4,1fr);
+  gap: 18px; margin-bottom: 18px;
+}
+@media(max-width:1100px){.dash-stat-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:600px){.dash-stat-grid{grid-template-columns:1fr;}}
+.dash-stat-card {
+  background: #fff; border-radius: 14px;
+  padding: 20px 22px 0 22px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border: 1px solid #e8eaf0; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  transition: box-shadow .2s;
+}
+.dash-stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+.dash-stat-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; margin-bottom: 10px;
+}
+.dash-stat-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; flex-shrink: 0;
+}
+.dash-stat-right { text-align: right; }
+.dash-stat-label {
+  font-size: 0.75rem; color: #8492a6; font-weight: 500;
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
+}
+.dash-stat-value { font-size: 1.65rem; font-weight: 800; color: #1a2035; line-height: 1; }
+.dash-stat-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.72rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px; margin-top: 5px;
+}
+.badge-up   { background: #dcfce7; color: #16a34a; }
+.badge-down { background: #fee2e2; color: #dc2626; }
+.badge-neutral { background: #f1f5f9; color: #64748b; }
+.dash-sparkline { margin: 10px -22px 0 -22px; display: block; height: 52px; width: calc(100% + 44px); }
+/* Chart Row */
+.dash-chart-row {
+  display: grid; grid-template-columns: 1.6fr 1fr;
+  gap: 18px; margin-bottom: 18px;
+}
+@media(max-width:900px){.dash-chart-row{grid-template-columns:1fr;}}
+.dash-chart-card {
+  background: #fff; border-radius: 14px; padding: 22px 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06); border: 1px solid #e8eaf0;
+}
+.dash-chart-title { font-size: 0.95rem; font-weight: 700; color: #1a2035; margin-bottom: 18px; }
+.dash-chart-body { position: relative; height: 260px; }
+.dash-donut-legend { display: flex; gap: 14px; justify-content: center; margin-top: 10px; }
+.dash-legend-dot { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; color: #6b7280; font-weight: 500; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+/* Table */
+.dash-table-card {
+  background: #fff; border-radius: 14px; padding: 22px 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06); border: 1px solid #e8eaf0; margin-bottom: 18px;
+}
+.dash-table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.dash-table-header h3 { font-size: 0.95rem; font-weight: 700; color: #1a2035; margin: 0; }
+.dash-table { width: 100%; border-collapse: collapse; }
+.dash-table th {
+  font-size: 0.72rem; font-weight: 700; color: #9ca3af;
+  text-transform: uppercase; letter-spacing: .5px;
+  padding: 8px 12px; border-bottom: 1px solid #f0f1f5; text-align: left;
+}
+.dash-table td {
+  font-size: 0.84rem; color: #374151;
+  padding: 12px 12px; border-bottom: 1px solid #f7f8fb; vertical-align: middle;
+}
+.dash-table tr:last-child td { border-bottom: none; }
+.dash-table tr:hover td { background: #fafbff; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+}
+.pill-success { background: #dcfce7; color: #16a34a; }
+.pill-gray    { background: #f1f5f9; color: #64748b; }
+.pill-info    { background: #dbeafe; color: #1d4ed8; }
+.action-icon {
+  background: none; border: none; cursor: pointer;
+  padding: 5px 8px; border-radius: 6px; color: #6b7280;
+  font-size: 0.9rem; transition: all .15s; text-decoration: none; display:inline-flex;
+}
+.action-icon:hover { background: #f3f4f6; color: #1a2035; }
+.action-icon.del:hover { background: #fee2e2; color: #dc2626; }
 
-<!-- React Dashboard App -->
+/* ── DARK MODE OVERRIDES ── */
+body.dark-mode .dash-wrap {
+  background: #0f172a;
+}
+body.dark-mode .dash-greeting h1 {
+  color: #e2e8f0;
+}
+body.dark-mode .dash-greeting p {
+  color: #94a3b8;
+}
+/* Buttons */
+body.dark-mode .dash-btn-primary {
+  background: #334155; color: #e2e8f0;
+}
+body.dark-mode .dash-btn-primary:hover {
+  background: #475569; color: #fff;
+}
+body.dark-mode .dash-btn-outline {
+  background: #1e293b; color: #cbd5e1; border-color: #334155;
+}
+body.dark-mode .dash-btn-outline:hover {
+  background: #273549; color: #e2e8f0;
+}
+/* Stat Cards */
+body.dark-mode .dash-stat-card {
+  background: #1e293b; border-color: #334155;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+body.dark-mode .dash-stat-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+}
+body.dark-mode .dash-stat-label { color: #64748b; }
+body.dark-mode .dash-stat-value { color: #e2e8f0; }
+body.dark-mode .badge-up   { background: #166534; color: #86efac; }
+body.dark-mode .badge-down { background: #7f1d1d; color: #fca5a5; }
+body.dark-mode .badge-neutral { background: #1e293b; color: #94a3b8; }
+/* Chart Cards */
+body.dark-mode .dash-chart-card {
+  background: #1e293b; border-color: #334155;
+}
+body.dark-mode .dash-chart-title { color: #e2e8f0; }
+body.dark-mode .dash-legend-dot  { color: #94a3b8; }
+/* Table Card */
+body.dark-mode .dash-table-card {
+  background: #1e293b; border-color: #334155;
+}
+body.dark-mode .dash-table-header h3 { color: #e2e8f0; }
+body.dark-mode .dash-table th {
+  color: #64748b; border-bottom-color: #273549;
+}
+body.dark-mode .dash-table td {
+  color: #cbd5e1; border-bottom-color: #1a2844;
+}
+body.dark-mode .dash-table tr:hover td { background: #243044; }
+/* Pills */
+body.dark-mode .pill-success { background: #166534; color: #86efac; }
+body.dark-mode .pill-gray    { background: #273549; color: #94a3b8; }
+body.dark-mode .pill-info    { background: #1e3a5f; color: #93c5fd; }
+/* Action icons */
+body.dark-mode .action-icon { color: #64748b; }
+body.dark-mode .action-icon:hover { background: #334155; color: #e2e8f0; }
+body.dark-mode .action-icon.del:hover { background: #7f1d1d; color: #fca5a5; }
+</style>
+
+<div class="dash-wrap">
+  <div class="dash-page-header">
+    <div class="dash-greeting">
+      <h1 id="dash-greeting-text">Good afternoon, Administrator</h1>
+      <p id="dash-date-text"></p>
+    </div>
+    <div class="dash-actions" id="dash-actions-root"></div>
+  </div>
+  <div id="dash-cards-root"></div>
+  <div class="dash-chart-row">
+    <div class="dash-chart-card">
+      <div class="dash-chart-title">Monthly Customer Registrations</div>
+      <div class="dash-chart-body"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="dash-chart-card">
+      <div class="dash-chart-title">Subscription Status Overview</div>
+      <div class="dash-chart-body"><canvas id="donutChart"></canvas></div>
+      <div class="dash-donut-legend">
+        <span class="dash-legend-dot"><span class="dot" style="background:#22c55e;"></span>Active</span>
+        <span class="dash-legend-dot"><span class="dot" style="background:#ef4444;"></span>Inactive</span>
+      </div>
+    </div>
+  </div>
+  <div id="dash-table-root"></div>
+</div>
+
 <script type="text/babel">
 {% verbatim %}
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect } = React;
 const D = window.__DASHBOARD__;
 
-/* ── Animated Counter Hook ── */
-function useCounter(target, duration = 900) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    if (!target) return;
-    let start = 0;
-    const step = 16;
-    const inc = target / (duration / step);
-    const timer = setInterval(() => {
-      start += inc;
-      if (start >= target) { start = target; clearInterval(timer); }
-      setVal(Math.floor(start));
-    }, step);
-    return () => clearInterval(timer);
-  }, [target, duration]);
-  return val;
-}
-
-/* ── Stat Card Component ── */
-function StatCard({ icon, value, label, gradient, bgIcon, link, delay = 0 }) {
-  const count = useCounter(value);
-  return (
-    <a href={link} className="nova-stat-card" style={{
-      background: gradient,
-      animationDelay: `${delay}s`,
-      animation: `fadeInUp 0.5s ease ${delay}s both`,
-      textDecoration: 'none', color: '#fff'
-    }}>
-      <div className="stat-icon"><i className={`fas ${icon}`}></i></div>
-      <div className="stat-number">{count.toLocaleString()}</div>
-      <div className="stat-label">{label}</div>
-      <div className="stat-footer"><i className="fas fa-arrow-right"></i> View details</div>
-      <div className="stat-bg-icon"><i className={`fas ${bgIcon || icon}`}></i></div>
-    </a>
-  );
-}
-
-/* ── Chart Card Component ── */
-function BarChartCard() {
-  const canvasRef = useRef(null);
-  useEffect(() => {
-    if (!canvasRef.current || typeof Chart === 'undefined') return;
-    const ctx = canvasRef.current.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 0, 250);
-    grad.addColorStop(0, 'rgba(79,142,247,0.85)');
-    grad.addColorStop(1, 'rgba(99,102,241,0.15)');
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: D.chartLabels,
-        datasets: [{
-          label: 'New Customers',
-          data: D.chartValues,
-          backgroundColor: grad,
-          borderColor: 'rgba(79,142,247,1)',
-          borderWidth: 2,
-          borderRadius: 6,
-          barThickness: 28,
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        legend: { display: false },
-        scales: {
-          xAxes: [{ gridLines: { display: false }, ticks: { fontColor: '#94a3b8', fontSize: 11 } }],
-          yAxes: [{ gridLines: { color: 'rgba(148,163,184,0.12)', drawBorder: false },
-            ticks: { beginAtZero: true, precision: 0, fontColor: '#94a3b8', fontSize: 11 } }]
-        },
-        animation: { duration: 1200, easing: 'easeOutQuart' },
-        tooltips: {
-          backgroundColor: '#1e293b', titleFontColor: '#fff',
-          bodyFontColor: '#cbd5e1', borderColor: '#334155',
-          borderWidth: 1, cornerRadius: 8, xPadding: 12, yPadding: 10,
-        }
-      }
-    });
-  }, []);
-  return (
-    <div className="nova-chart-card">
-      <div className="chart-header">
-        <h3><i className="fas fa-chart-bar"></i> Monthly Customer Registrations</h3>
-      </div>
-      <div className="chart-body">
-        <canvas ref={canvasRef} style={{ minHeight: '260px', height: '260px', maxHeight: '260px', maxWidth: '100%' }}></canvas>
-      </div>
-    </div>
-  );
-}
-
-function DoughnutChartCard() {
-  const canvasRef = useRef(null);
-  useEffect(() => {
-    if (!canvasRef.current || typeof Chart === 'undefined') return;
-    new Chart(canvasRef.current.getContext('2d'), {
-      type: 'doughnut',
-      data: {
-        labels: ['Active', 'Inactive'],
-        datasets: [{
-          data: [D.activeUsersCount, D.inactiveUsersCount],
-          backgroundColor: ['#4f8ef7', '#e2e8f0'],
-          hoverBackgroundColor: ['#6366f1', '#cbd5e1'],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        cutoutPercentage: 72,
-        legend: {
-          display: true, position: 'bottom',
-          labels: { fontColor: '#64748b', fontSize: 12, padding: 16, usePointStyle: true }
-        },
-        animation: { animateRotate: true, duration: 1200, easing: 'easeOutQuart' },
-        tooltips: {
-          backgroundColor: '#1e293b', bodyFontColor: '#cbd5e1',
-          cornerRadius: 8, xPadding: 12, yPadding: 10,
-        }
-      }
-    });
-  }, []);
-  return (
-    <div className="nova-chart-card">
-      <div className="chart-header">
-        <h3><i className="fas fa-chart-pie"></i> Active vs Inactive</h3>
-      </div>
-      <div className="chart-body" style={{ display: 'flex', justifyContent: 'center' }}>
-        <canvas ref={canvasRef} style={{ minHeight: '260px', height: '260px', maxHeight: '260px', maxWidth: '100%' }}></canvas>
-      </div>
-    </div>
-  );
-}
-
-/* ── Quick Actions ── */
-function QuickActions() {
-  return (
-    <div className="nova-quick-actions">
-      <a href={D.urls.userAdd} className="nova-quick-action">
-        <i className="fas fa-user-plus" style={{ color: '#0ea5e9' }}></i> Add Customer
-      </a>
-      <a href={D.urls.planAdd} className="nova-quick-action">
-        <i className="fas fa-plus-circle" style={{ color: '#8b5cf6' }}></i> Add Plan
-      </a>
-      <a href={D.urls.userList} className="nova-quick-action">
-        <i className="fas fa-list" style={{ color: '#f59e0b' }}></i> All Customers
-      </a>
-      <a href={D.urls.planList} className="nova-quick-action">
-        <i className="fas fa-tags" style={{ color: '#22c55e' }}></i> All Plans
-      </a>
-    </div>
-  );
-}
-
-/* ── Plans Table ── */
-function PlansTable() {
-  return (
-    <div className="nova-table-card">
-      <div className="table-header">
-        <h3><i className="fas fa-tags"></i> Subscription Plans</h3>
-        <div className="table-actions">
-          <a href={D.urls.planAdd} className="btn btn-sm btn-primary">
-            <i className="fas fa-plus mr-1"></i> Add Plan
-          </a>
-        </div>
-      </div>
-      <div className="table-body">
-        <table className="nova-table">
-          <thead>
-            <tr>
-              <th>Plan Name</th>
-              <th>Price</th>
-              <th>Duration</th>
-              <th>Subscribers</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {D.recentPlans.length === 0 ? (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>
-                  No plans yet. <a href={D.urls.planAdd}>Add first plan.</a>
-                </td>
-              </tr>
-            ) : D.recentPlans.map((plan, i) => (
-              <tr key={plan.id}>
-                <td><strong>{plan.name}</strong></td>
-                <td>${plan.price}</td>
-                <td>{plan.duration}</td>
-                <td><span className="nova-pill nova-pill-info">{plan.subscribers}</span></td>
-                <td>
-                  {plan.isActive
-                    ? <span className="nova-pill nova-pill-success"><i className="fas fa-check-circle" style={{fontSize:'0.65rem'}}></i> Active</span>
-                    : <span className="nova-pill nova-pill-gray">Inactive</span>}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <a href={plan.editUrl} className="btn btn-xs btn-warning text-white">
-                    <i className="fas fa-edit"></i> Edit
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="table-footer">
-        <a href={D.urls.planList} className="btn btn-sm btn-default">View All Plans</a>
-      </div>
-    </div>
-  );
-}
-
-/* ── Customers Table ── */
-function CustomersTable() {
-  return (
-    <div className="nova-table-card">
-      <div className="table-header">
-        <h3><i className="fas fa-users"></i> Recently Registered Customers</h3>
-        <div className="table-actions">
-          <a href={D.urls.userAdd} className="btn btn-sm btn-primary">
-            <i className="fas fa-plus mr-1"></i> Add Customer
-          </a>
-        </div>
-      </div>
-      <div className="table-body">
-        <table className="nova-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Joined</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {D.recentUsers.length === 0 ? (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>
-                  No customers registered yet.
-                </td>
-              </tr>
-            ) : D.recentUsers.map((u, i) => (
-              <tr key={u.id}>
-                <td>{i + 1}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: '32px', height: '32px', borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #4f8ef7, #6366f1)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontSize: '0.72rem', fontWeight: 700, flexShrink: 0
-                    }}>
-                      {u.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span style={{ fontWeight: 600 }}>{u.name}</span>
-                  </div>
-                </td>
-                <td>{u.email}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{u.dateJoined}</td>
-                <td>
-                  {u.isActive
-                    ? <span className="nova-pill nova-pill-success"><i className="fas fa-check-circle" style={{fontSize:'0.65rem'}}></i> Active</span>
-                    : <span className="nova-pill nova-pill-danger"><i className="fas fa-times-circle" style={{fontSize:'0.65rem'}}></i> Inactive</span>}
-                </td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <a href={u.detailUrl} className="btn btn-xs btn-info text-white mr-1">
-                    <i className="fas fa-eye"></i> View
-                  </a>
-                  <a href={u.editUrl} className="btn btn-xs btn-warning text-white">
-                    <i className="fas fa-edit"></i> Edit
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="table-footer">
-        <a href={D.urls.userList} className="btn btn-sm btn-default">View All Customers</a>
-      </div>
-    </div>
-  );
-}
-
-/* ── Main Dashboard App ── */
-function DashboardApp() {
+(function(){
   const now = new Date();
-  const hour = now.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const h = now.getHours();
+  const g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  document.getElementById('dash-greeting-text').textContent = g + ', Administrator';
+  document.getElementById('dash-date-text').textContent = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+})();
 
+function Sparkline({ color, values }) {
+  const pts = values || [3,6,4,8,5,9,7,10,8,12];
+  const w=200, h=52, pad=4;
+  const mn=Math.min(...pts), mx=Math.max(...pts), range=mx-mn||1;
+  const xs=pts.map((_,i)=>(i/(pts.length-1))*w);
+  const ys=pts.map(v=>h-pad-((v-mn)/range)*(h-2*pad));
+  const d=xs.map((x,i)=>`${i===0?'M':'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const fill=`${d} L${w},${h} L0,${h} Z`;
+  const gid='sg'+color.replace('#','');
   return (
-    <>
-      {/* Content Header */}
-      <div className="content-header">
-        <div className="container-fluid">
-          <div className="row align-items-center">
-            <div className="col-sm-6">
-              <h1 className="m-0" style={{ fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
-                <i className="fas fa-tachometer-alt mr-2" style={{ color: '#4f8ef7', fontSize: '1.1rem' }}></i>Dashboard
-              </h1>
-            </div>
-            <div className="col-sm-6">
-              <ol className="breadcrumb float-sm-right" style={{ background: 'transparent', padding: 0, margin: 0 }}>
-                <li className="breadcrumb-item"><a href="#" style={{ color: '#4f8ef7' }}>Home</a></li>
-                <li className="breadcrumb-item active" style={{ color: '#94a3b8' }}>Dashboard</li>
-              </ol>
-            </div>
+    <svg className="dash-sparkline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0.04"/>
+        </linearGradient>
+      </defs>
+      <path d={fill} fill={`url(#${gid})`}/>
+      <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function Counter({ target }) {
+  const [v, setV] = useState(0);
+  useEffect(()=>{
+    const n=parseFloat(String(target).replace(/[^0-9.]/g,''))||0;
+    if(!n){setV(0);return;}
+    let cur=0; const inc=n/(900/16);
+    const t=setInterval(()=>{cur+=inc;if(cur>=n){cur=n;clearInterval(t);}setV(Math.floor(cur));},16);
+    return()=>clearInterval(t);
+  },[target]);
+  return <>{v.toLocaleString()}</>;
+}
+
+function StatCard({icon,iconBg,label,rawValue,displayValue,badge,badgeType='neutral',sparkColor,sparkValues}){
+  return(
+    <div className="dash-stat-card">
+      <div className="dash-stat-top">
+        <div className="dash-stat-icon" style={{background:iconBg}}>
+          <i className={`fas ${icon}`} style={{color:'#fff'}}></i>
+        </div>
+        <div className="dash-stat-right">
+          <div className="dash-stat-label">{label}</div>
+          <div className="dash-stat-value">
+            {displayValue != null ? displayValue : <Counter target={rawValue}/>}
           </div>
+          {badge&&<span className={`dash-stat-badge badge-${badgeType}`}>
+            {badgeType==='up'&&<i className="fas fa-arrow-up" style={{fontSize:'0.6rem'}}></i>}
+            {badgeType==='down'&&<i className="fas fa-arrow-down" style={{fontSize:'0.6rem'}}></i>}
+            {badge}
+          </span>}
         </div>
       </div>
+      <Sparkline color={sparkColor} values={sparkValues}/>
+    </div>
+  );
+}
 
-      <section className="content">
-        <div className="container-fluid">
-          {/* Greeting */}
-          <div className="nova-greeting">
-            <h2>{greeting}, Administrator <span style={{ fontSize: '1.4rem' }}>&#128075;</span></h2>
-            <p>{dateStr} &mdash; Here's what's happening with your platform today.</p>
-          </div>
+function ActionButtons(){
+  return(
+    <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+      <a href={D.urls.userAdd} className="dash-btn dash-btn-primary"><i className="fas fa-user-plus"></i> Add Customer</a>
+      <a href={D.urls.planAdd} className="dash-btn dash-btn-outline"><i className="fas fa-plus"></i> Add Plan</a>
+      <a href={D.urls.userList} className="dash-btn dash-btn-outline"><i className="fas fa-users"></i> All Customers</a>
+      <a href={D.urls.planList} className="dash-btn dash-btn-outline"><i className="fas fa-tags"></i> All Plans</a>
+    </div>
+  );
+}
 
-          {/* Quick Actions */}
-          <QuickActions />
-
-          {/* Stat Cards — Customer Row */}
-          <div className="nova-stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            <StatCard icon="fa-users" value={D.usersCount} label="Total Customers"
-              gradient="linear-gradient(135deg, #0ea5e9, #38bdf8)" bgIcon="fa-users"
-              link={D.urls.userList} delay={0.05} />
-            <StatCard icon="fa-user-check" value={D.activeUsersCount} label="Active Customers"
-              gradient="linear-gradient(135deg, #22c55e, #4ade80)" bgIcon="fa-user-check"
-              link={D.urls.userList} delay={0.1} />
-            <StatCard icon="fa-user-plus" value={D.newUsersCount} label="New (Last 30 Days)"
-              gradient="linear-gradient(135deg, #f59e0b, #fbbf24)" bgIcon="fa-user-plus"
-              link={D.urls.userAdd} delay={0.15} />
-            <StatCard icon="fa-user-slash" value={D.inactiveUsersCount} label="Inactive Customers"
-              gradient="linear-gradient(135deg, #ef4444, #f87171)" bgIcon="fa-user-slash"
-              link={D.urls.userList} delay={0.2} />
-          </div>
-
-          {/* Stat Cards — Subscription Row */}
-          <div className="nova-stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-            <StatCard icon="fa-tags" value={D.plansCount} label="Total Plans"
-              gradient="linear-gradient(135deg, #8b5cf6, #a78bfa)" bgIcon="fa-tags"
-              link={D.urls.planList} delay={0.08} />
-            <StatCard icon="fa-check-circle" value={D.activePlansCount} label="Active Plans"
-              gradient="linear-gradient(135deg, #0891b2, #22d3ee)" bgIcon="fa-check-circle"
-              link={D.urls.planList} delay={0.14} />
-            <StatCard icon="fa-star" value={D.activeSubsCount} label="Active Subscriptions"
-              gradient="linear-gradient(135deg, #db2777, #f472b6)" bgIcon="fa-star"
-              link={D.urls.planList} delay={0.2} />
-          </div>
-
-          {/* Charts */}
-          <div className="nova-chart-grid">
-            <BarChartCard />
-            <DoughnutChartCard />
-          </div>
-
-          {/* Tables */}
-          <PlansTable />
-          <CustomersTable />
-        </div>
-      </section>
+function StatCards(){
+  return(
+    <>
+      <div className="dash-stat-grid">
+        <StatCard icon="fa-users" iconBg="#0ea5e9" label="Total Customers" rawValue={D.usersCount} badge="+5%" badgeType="up" sparkColor="#0ea5e9" sparkValues={[10,18,14,22,18,28,22,30,26,34]}/>
+        <StatCard icon="fa-user-check" iconBg="#22c55e" label="Active Customers" rawValue={D.activeUsersCount} sparkColor="#22c55e" sparkValues={[8,14,12,18,15,22,19,26,22,30]}/>
+        <StatCard icon="fa-user-plus" iconBg="#f59e0b" label="New Signups (28 days)" rawValue={D.newUsersCount} sparkColor="#f59e0b" sparkValues={[3,5,4,7,5,8,6,9,7,10]}/>
+        <StatCard icon="fa-clock" iconBg="#f97316" label="Inactive Customers" rawValue={D.inactiveUsersCount} sparkColor="#f97316" sparkValues={[5,4,6,4,7,5,6,4,5,6]}/>
+      </div>
+      <div className="dash-stat-grid">
+        <StatCard icon="fa-gift" iconBg="#8b5cf6" label="Total Plans" rawValue={D.plansCount} sparkColor="#8b5cf6" sparkValues={[1,2,2,3,3,4,4,5,5,6]}/>
+        <StatCard icon="fa-id-card" iconBg="#3b82f6" label="Active Subscriptions" rawValue={D.activeSubsCount} badge="+12%" badgeType="up" sparkColor="#3b82f6" sparkValues={[20,30,28,40,35,50,44,55,48,60]}/>
+        <StatCard icon="fa-chart-bar" iconBg="#06b6d4" label="Monthly Revenue" displayValue={D.monthlyRevenue} sparkColor="#06b6d4" sparkValues={[12,18,16,24,20,30,25,35,28,38]}/>
+        <StatCard icon="fa-chart-line" iconBg="#ef4444" label="Churn Rate" displayValue={D.churnRate} sparkColor="#ef4444" sparkValues={[8,7,9,7,8,6,7,6,5,7]}/>
+      </div>
     </>
   );
 }
 
-/* ── Mount ── */
-const root = ReactDOM.createRoot(document.getElementById('nova-dashboard-root'));
-root.render(<DashboardApp />);
+function PlansTable(){
+  return(
+    <div className="dash-table-card">
+      <div className="dash-table-header">
+        <h3>Subscription Plans</h3>
+        <a href={D.urls.planAdd} className="dash-btn dash-btn-primary" style={{fontSize:'0.78rem',padding:'7px 14px'}}>
+          <i className="fas fa-plus"></i> Add Plan
+        </a>
+      </div>
+      <table className="dash-table">
+        <thead>
+          <tr>
+            <th>Plan Name</th><th>Price</th><th>Status</th><th>Subscribers</th><th style={{textAlign:'right'}}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {D.recentPlans.length===0?(
+            <tr><td colSpan="5" style={{textAlign:'center',color:'#9ca3af',padding:'32px'}}>
+              No plans yet. <a href={D.urls.planAdd} style={{color:'#3b82f6'}}>Add your first plan.</a>
+            </td></tr>
+          ):D.recentPlans.map(plan=>(
+            <tr key={plan.id}>
+              <td style={{fontWeight:600}}>{plan.name}</td>
+              <td>${plan.price}</td>
+              <td>{plan.isActive?<span className="pill pill-success"><i className="fas fa-circle" style={{fontSize:'0.5rem'}}></i> Active</span>:<span className="pill pill-gray">Inactive</span>}</td>
+              <td><span className="pill pill-info">{plan.subscribers}</span></td>
+              <td style={{textAlign:'right'}}>
+                <a href={plan.editUrl} className="action-icon" title="Edit"><i className="fas fa-pencil-alt"></i></a>
+                <a href={plan.deleteUrl} className="action-icon del" title="Delete"
+                   onClick={e=>{if(!confirm('Delete this plan?'))e.preventDefault();}}><i className="fas fa-trash-alt"></i></a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('dash-actions-root')).render(<ActionButtons/>);
+ReactDOM.createRoot(document.getElementById('dash-cards-root')).render(<StatCards/>);
+ReactDOM.createRoot(document.getElementById('dash-table-root')).render(<PlansTable/>);
 {% endverbatim %}
+</script>
+
+<script>
+(function waitChart(){
+  if(typeof Chart==='undefined'){setTimeout(waitChart,80);return;}
+  const D=window.__DASHBOARD__;
+  const isDark = document.body.classList.contains('dark-mode');
+  const tickColor   = isDark ? '#64748b' : '#9ca3af';
+  const gridColor   = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const barColor    = isDark ? '#334155' : '#1a2035';
+  const barHover    = '#3b82f6';
+  const tooltipBg   = isDark ? '#0f172a' : '#1a2035';
+  const tooltipBody = isDark ? '#94a3b8' : '#d1d5db';
+
+  // Bar
+  new Chart(document.getElementById('barChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:D.chartLabels,datasets:[{label:'Registrations',data:D.chartValues,backgroundColor:barColor,borderRadius:6,barThickness:28,hoverBackgroundColor:barHover}]},
+    options:{responsive:true,maintainAspectRatio:false,legend:{display:false},
+      scales:{xAxes:[{gridLines:{display:false},ticks:{fontColor:tickColor,fontSize:11}}],
+              yAxes:[{gridLines:{color:gridColor,drawBorder:false},ticks:{beginAtZero:true,precision:0,fontColor:tickColor,fontSize:11}}]},
+      animation:{duration:1200,easing:'easeOutQuart'},
+      tooltips:{backgroundColor:tooltipBg,titleFontColor:'#fff',bodyFontColor:tooltipBody,cornerRadius:8,xPadding:12,yPadding:8}}
+  });
+  // Donut
+  const total=(D.activeUsersCount+D.inactiveUsersCount)||1;
+  const ap=Math.round(D.activeUsersCount/total*100);
+  new Chart(document.getElementById('donutChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:['Active '+ap+'%','Inactive '+(100-ap)+'%'],datasets:[{data:[D.activeUsersCount||1,D.inactiveUsersCount||0],backgroundColor:['#22c55e','#ef4444'],hoverBackgroundColor:['#16a34a','#dc2626'],borderWidth:3,borderColor:isDark?'#1e293b':'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutoutPercentage:68,legend:{display:false},
+      animation:{animateRotate:true,duration:1200,easing:'easeOutQuart'},
+      tooltips:{backgroundColor:tooltipBg,bodyFontColor:tooltipBody,cornerRadius:8,xPadding:12,yPadding:8}}
+  });
+})();
 </script>
 {% endblock %}

@@ -1,0 +1,237 @@
+
+=================================================================
+  Tool-Calling Evaluation
+  Model : Qwen/Qwen3.5-9B
+  Tests : 37
+=================================================================
+
+  Initialising LLM with tool bindings...
+  Ready. Running evaluation...
+
+[01]  CORRECT   |  Expected: get_weather           |  Called: get_weather
+       Prompt : What is the weather in Delhi?
+       Args   : {'city': 'Delhi'}
+
+[02]  CORRECT   |  Expected: get_weather           |  Called: get_weather
+       Prompt : How is the weather in New York today?
+       Args   : {'city': 'New York'}
+
+[03]  CORRECT   |  Expected: get_weather           |  Called: get_weather
+       Prompt : Tell me the current weather in London.
+       Args   : {'city': 'London'}
+
+[04]  CORRECT   |  Expected: get_weather           |  Called: get_weather
+       Prompt : Is it raining in Mumbai right now?
+       Args   : {'city': 'Mumbai'}
+
+[05]  CORRECT   |  Expected: get_user_profile      |  Called: get_user_profile
+       Prompt : Show me the profile of user id 123.
+       Args   : {'user_id': '123'}
+
+[06]  CORRECT   |  Expected: get_user_profile      |  Called: get_user_profile
+       Prompt : Get account details for user ID 456.
+       Args   : {'user_id': '456'}
+
+[07]  CORRECT   |  Expected: get_user_profile      |  Called: get_user_profile
+       Prompt : Fetch the profile information for user 789.
+       Args   : {'user_id': '789'}
+
+[08]  CORRECT   |  Expected: get_user_profile      |  Called: get_user_profile
+       Prompt : Who is user number 321?
+       Args   : {'user_id': '321'}
+
+[09]  CORRECT   |  Expected: get_order_status      |  Called: get_order_status
+       Prompt : Track my order number 456.
+       Args   : {'order_id': '456'}
+
+[10]  CORRECT   |  Expected: get_order_status      |  Called: get_order_status
+       Prompt : What is the status of order 789?
+       Args   : {'order_id': '789'}
+
+[11]  CORRECT   |  Expected: get_order_status      |  Called: get_order_status
+       Prompt : Where is my order ORD-001?
+       Args   : {'order_id': 'ORD-001'}
+
+[12]  CORRECT   |  Expected: get_order_status      |  Called: get_order_status
+       Prompt : Has order 555 been shipped yet?
+       Args   : {'order_id': '555'}
+
+[13]  CORRECT   |  Expected: calculate_price       |  Called: calculate_price
+       Prompt : How much would 5 units of product P001 cost?
+       Args   : {'product_id': 'P001', 'quantity': 5}
+
+[14]  CORRECT   |  Expected: calculate_price       |  Called: calculate_price
+       Prompt : Calculate the total price for 10 items of SKU X99.
+       Args   : {'product_id': 'X99', 'quantity': 10}
+
+[15]  CORRECT   |  Expected: search_products       |  Called: search_products
+       Prompt : Search for wireless headphones in the catalog.
+       Args   : {'query': 'wireless headphones'}
+
+[16]  ERROR     |  Expected: search_products       |  Called: ù
+       Prompt : Find products related to gaming keyboards.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f8f-2b8cfd1300af29f5143c7c79;e9fee256-4a49-414f-9d1d-6c1dfc198e5f)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[17]  ERROR     |  Expected: search_products       |  Called: ù
+       Prompt : Look up bluetooth speakers.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f8f-56475ed9684d5bce5e0f10d0;163365b1-5d5b-4091-95cb-5ebe75381c4c)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[18]  ERROR     |  Expected: search_knowledge_base |  Called: ù
+       Prompt : What is the company's refund policy?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f8f-3d61cbea10dce8f731ce2eb1;a87662f6-1885-4ed0-8b6d-901d23150d0f)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[19]  ERROR     |  Expected: search_knowledge_base |  Called: ù
+       Prompt : Explain how the onboarding process works.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f90-14bf261f259be1d21a0b57c6;c0cc977b-92f0-4064-bce2-d29af0e3a353)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[20]  ERROR     |  Expected: search_knowledge_base |  Called: ù
+       Prompt : What does the documentation say about data privacy?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f90-33bbc0263808d24264c6a5f0;df56e252-b6cf-44c4-ab78-b9e1d145b5bd)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[21]  ERROR     |  Expected: search_knowledge_base |  Called: ù
+       Prompt : Search the knowledge base for information about API rate limits.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f90-4135bd1d7db23e805065a4c4;e1506216-54b5-4429-8f55-df33acdf15af)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[22]  ERROR     |  Expected: search_knowledge_base |  Called: ù
+       Prompt : Find articles about subscription plan differences.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f90-2f54a4b7225c94b92329b23e;29d0e04a-a776-4449-8a43-ae587d557153)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[23]  ERROR     |  Expected: send_email            |  Called: ù
+       Prompt : Send an email to john@example.com with subject 'Meeting' and body 'Can we meet tomorrow?'
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f91-745f124c3bce0e0b5a29dd06;9848e0e8-9a0d-4c2f-9c54-8ce3d4e12ab1)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[24]  ERROR     |  Expected: send_email            |  Called: ù
+       Prompt : Email alice@company.com about the project update.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f91-47b19de07df5dfbd5f1ec75a;5a6f64e5-6886-47a4-99b5-738adcd641d9)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[25]  ERROR     |  Expected: send_email            |  Called: ù
+       Prompt : Send a message to hr@example.com with the subject 'Leave Request'.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f91-3edfe7695792e38e51820162;cbaf7842-c4fd-4268-8492-f205d42c72d2)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[26]  ERROR     |  Expected: get_stock_price       |  Called: ù
+       Prompt : What is the current stock price of Apple (AAPL)?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f91-2e30c0a120fa9f5b73e62472;b90325c7-38f3-4384-b1b8-93930154ce71)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[27]  ERROR     |  Expected: get_stock_price       |  Called: ù
+       Prompt : Check the stock price for Tesla.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f92-73978ec424e27c6e543ac127;1bb0afea-6b5b-471d-902a-e41e2e1493ea)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[28]  ERROR     |  Expected: get_stock_price       |  Called: ù
+       Prompt : How much is Google stock trading at right now?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f92-7861bfe13df1a32766c959ac;9a70e660-dada-4444-b451-88dbe9297cdb)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[29]  ERROR     |  Expected: translate_text        |  Called: ù
+       Prompt : Translate 'Hello, how are you?' into Spanish.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f92-5a6d979c037c522e4859affd;6e183e9e-eb73-4c89-ba4e-f99faea4d770)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[30]  ERROR     |  Expected: translate_text        |  Called: ù
+       Prompt : Can you translate this sentence to French: 'Good morning, have a nice day'?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f92-3367108f79ab31e3185414eb;61a004bd-3658-41c2-bfd8-88ec49fec34d)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[31]  ERROR     |  Expected: translate_text        |  Called: ù
+       Prompt : Translate 'Thank you very much' to Japanese.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f93-4085d82d6627f35009e06e55;82d71629-3fca-4ebd-9c05-53deb4b91850)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[32]  ERROR     |  Expected: book_appointment      |  Called: ù
+       Prompt : Book a dentist appointment on 2026-03-20 at 10:00.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f93-4336f1fa19b5d79b32815497;ff8af5e6-e69f-4f2b-92cf-16e2ed33d8d8)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[33]  ERROR     |  Expected: book_appointment      |  Called: ù
+       Prompt : Schedule a haircut for March 25th at 2 PM.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f94-65fb0d3436b7df5619a3aaaf;ba8a261a-6051-4bc4-929c-564290255fed)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[34]  ERROR     |  Expected: book_appointment      |  Called: ù
+       Prompt : I'd like to book a consultation on 2026-04-01 at 09:30.
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f94-5bcdc80e6002a1272c3b1ecc;8cde5649-812f-47f9-bc55-dde8cfe8bc5a)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[35]  ERROR     |  Expected: get_exchange_rate     |  Called: ù
+       Prompt : What is the exchange rate from USD to INR?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f94-70f6fab51892767052d19bbd;5d2c005b-d0e3-4da8-87be-e7fa16022da7)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[36]  ERROR     |  Expected: get_exchange_rate     |  Called: ù
+       Prompt : How many Euros can I get for 1 British Pound?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f94-6ac5c1b01be5bb653ce2a1d0;5fb39cda-1e84-48f3-b5b0-c7e3dce4c192)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+[37]  ERROR     |  Expected: get_exchange_rate     |  Called: ù
+       Prompt : Convert USD to Japanese Yen ù what is the current rate?
+       Error  : Client error '402 Payment Required' for url 'https://router.huggingface.co/v1/chat/completions' (Request ID: Root=1-69b28f95-56469b9a36114deb0996aab7;10c5e1b9-bf9b-4586-974c-7943cae7c0da)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402
+
+You have depleted your monthly included credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get 20x more included usage.
+
+================================================
+  EVALUATION SUMMARY
+================================================
+  Total tests              : 37
+  Tool calls triggered     : 15
+  Correct tool calls       : 15
+  Wrong tool calls         : 0
+  No tool called           : 0
+  Errors                   : 22
+  Tool call success rate   : 40.54%
+================================================
+
+  Report saved -> tool_call_eval_report.json

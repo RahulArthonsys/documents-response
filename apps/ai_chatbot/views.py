@@ -753,82 +753,71 @@ def get_conversational_agent(conversation_id: int = None, user=None):
 
 def stream_agent_response(query: str, conversation: 'Conversation') -> str:
     """
-    Main Non-Streaming RAG Pipeline
-    ────────────────────────────────
+    Main Non-Streaming RAG Pipeline  (Agent Tool-Call Architecture)
+    ────────────────────────────────────────────────────────────────
     User Question
           │
           ▼
-    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+    LangChain Agent  (Qwen/Qwen3.5-9B)
+          │
+          ├─► Tool: search_uploaded_documents  (Priority 1 — session docs)
+          │         └─► ChromaDB session collection → LLM → answer
+          │
+          └─► Tool: search_knowledge_base       (Priority 2 — KB docs)
+                    └─► ChromaDB KB collection  → LLM → answer
           │
           ▼
-    Vector Database Search  (session collection → KB collection)
-          │
-          ▼
-    Retrieve Top Chunks
-          │
-          ▼
-    Send Context + Question to LLM  (HuggingFace Qwen)
-          │
-          ▼
-    LLM Generates Response
+    Agent Output (clean, stripped of think-tags)
           │
           ▼
     Final Answer to User
     """
-    # ── Step 1: User Question ─────────────────────────────────────
-    has_session_docs = SessionDocument.objects.filter(
-        conversation=conversation, is_processed=True
-    ).exists()
-    logger.info(f"[Pipeline] Step 1 | Question received | session_docs={has_session_docs}")
+    from langchain_core.messages import HumanMessage, AIMessage
 
-    # ── Step 2: Create Query Embedding (detection gate) ───────────
-    # detect_is_question uses HF Qwen to decide if vector search is needed
-    is_question = detect_is_question(query, has_session_document=has_session_docs)
-    logger.info(f"[Pipeline] Step 2 | Detection gate: is_question={is_question}")
+    # ── Step 1: Build Chat History ────────────────────────────────
+    recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
+    recent_msgs.reverse()
+    chat_history = []
+    for m in recent_msgs:
+        if m.role == 'user':
+            chat_history.append(HumanMessage(content=m.content))
+        elif m.role == 'assistant':
+            chat_history.append(AIMessage(content=m.content))
 
-    if is_question:
-        # ── Steps 3-4: Vector DB Search → Retrieve Chunks (Priority 1) ──
-        if has_session_docs:
-            logger.info("[Pipeline] Step 3 | Searching session ChromaDB collection (Priority 1)")
-            answer = session_document_search(query, conversation.pk)
-            if answer:
-                # ── Steps 6-7: Response returned from session pipeline ──
-                return answer
+    # ── Step 2: Get Agent with Registered Tools ───────────────────
+    # Agent has: search_uploaded_documents (P1) + search_knowledge_base (P2)
+    logger.info("[Pipeline] Step 2 | Creating LangChain agent with tool-call support")
+    agent = get_conversational_agent(
+        conversation_id=conversation.pk,
+        user=conversation.user,
+    )
 
-        # ── Steps 3-4: Vector DB Search → Retrieve Chunks (Priority 2) ──
-        logger.info("[Pipeline] Step 3 | Searching knowledge-base ChromaDB collection (Priority 2)")
-        kb_answer = knowledge_base_search_tool(query, conversation)
-        if kb_answer:
-            # ── Steps 6-7: Response returned from KB pipeline ──
-            return kb_answer
-
-    # ── Fallback: Agent / General Chat ───────────────────────────
-    logger.info("[Pipeline] Fallback | Routing to LangChain agent / general chat")
-    try:
-        agent = get_conversational_agent(
-            conversation_id=conversation.pk,
-            user=conversation.user
-        )
-        if agent:
-            from langchain_core.messages import HumanMessage, AIMessage
-            recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
-            recent_msgs.reverse()
-            chat_history = []
-            for m in recent_msgs:
-                if m.role == 'user':
-                    chat_history.append(HumanMessage(content=m.content))
-                elif m.role == 'assistant':
-                    chat_history.append(AIMessage(content=m.content))
-
+    if agent:
+        try:
+            # ── Step 3: Agent Invokes Tools & Generates Response ──────────
+            # Agent decides which tool(s) to call based on query & priorities
+            logger.info("[Pipeline] Step 3 | Agent invoking tools via tool-call")
             result = agent.invoke({
                 "input": query,
                 "chat_history": chat_history,
             })
-            return result.get("output", "I'm sorry, I couldn't process that request.")
-    except Exception as e:
-        logger.error(f"Agent invoke error: {e}\n{traceback.format_exc()}")
 
-    # ── Step 7: Final Answer — plain chat fallback ────────────────
+            # Log which tools were called
+            steps = result.get("intermediate_steps", [])
+            for step in steps:
+                if hasattr(step[0], 'tool'):
+                    logger.info(f"[Pipeline] Tool called: {step[0].tool!r} | Input: {str(step[0].tool_input)[:80]!r}")
+
+            raw = result.get("output", "")
+            clean = _strip_think_tags(raw)
+            logger.info(f"[Pipeline] Step 4 | Agent response ready ({len(clean)} chars)")
+            return clean or "I'm sorry, I couldn't process that request."
+
+        except Exception as e:
+            logger.error(f"[Pipeline] Agent invoke error: {e}\n{traceback.format_exc()}")
+
+    # ── Fallback: plain chat (no tools) ──────────────────────────
+    logger.info("[Pipeline] Fallback | Agent unavailable, using general chat")
     return _general_chat_response(query, conversation)
 
 
@@ -867,199 +856,87 @@ def _general_chat_response(query: str, conversation: 'Conversation') -> str:
 
 def generate_sse_stream(query: str, conversation: 'Conversation'):
     """
-    Streaming RAG Pipeline  (Server-Sent Events)
-    ─────────────────────────────────────────────
+    Streaming RAG Pipeline  (Server-Sent Events — Agent Tool-Call Architecture)
+    ───────────────────────────────────────────────────────────────────────────
     User Question
           │
           ▼
-    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+    LangChain Agent  (Qwen/Qwen3.5-9B)
+          │
+          ├─► Tool: search_uploaded_documents  (Priority 1 — session docs)
+          │         └─► ChromaDB session collection → LLM → context
+          │
+          └─► Tool: search_knowledge_base       (Priority 2 — KB docs)
+                    └─► ChromaDB KB collection  → LLM → context
           │
           ▼
-    Vector Database Search  (session collection → KB collection)
+    Agent Output  (think-tags stripped)
           │
           ▼
-    Retrieve Top Chunks
-          │
-          ▼
-    Send Context + Question to LLM  (HuggingFace Qwen — streaming)
-          │
-          ▼
-    LLM Generates Response  (token-by-token SSE)
-          │
-          ▼
-    Final Answer to User
+    Word-by-word SSE stream → Client
     """
     try:
         yield 'data: {"type": "start"}\n\n'
 
-        # ── Step 1: User Question ─────────────────────────────────
-        has_session_docs = SessionDocument.objects.filter(
-            conversation=conversation, is_processed=True
-        ).exists()
-        logger.info(f"[SSE Pipeline] Step 1 | Question received | session_docs={has_session_docs}")
+        from langchain_core.messages import HumanMessage, AIMessage
 
-        # ── Step 2: Create Query Embedding (detection gate) ───────
-        is_question = detect_is_question(query, has_session_document=has_session_docs)
-        logger.info(f"[SSE Pipeline] Step 2 | Detection gate: is_question={is_question}")
-
-        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        stream_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
-
-        session_context = ""
-        kb_context = ""
-
-        # ── Step 3: Vector Database Search ───────────────────────
-        if is_question and has_session_docs:
-            # Priority 1: session-scoped ChromaDB collection
-            logger.info("[SSE Pipeline] Step 3 | Searching session ChromaDB collection")
-            results = vector_utils.search_session_documents(query, conversation.pk, top_k=20)
-            logger.info(f"[SSE Pipeline] Step 3 | search_session_documents returned {len(results)} results")
-
-            # ── Auto-reindex if collection is empty but DB says docs are processed ──
-            if not results:
-                session_coll = vector_utils.get_or_create_session_collection(conversation.pk)
-                coll_count = session_coll.count()
-                logger.warning(
-                    f"[SSE Pipeline] Session collection has {coll_count} chunks for "
-                    f"conv {conversation.pk}. Re-indexing session documents..."
-                )
-                # Re-index every processed session doc for this conversation
-                processed_docs = SessionDocument.objects.filter(
-                    conversation=conversation, is_processed=True
-                )
-                for sdoc in processed_docs:
-                    try:
-                        file_path = sdoc.file.path
-                        ext = os.path.splitext(file_path)[1].lower().lstrip('.')
-                        re_result = vector_utils.index_session_document(
-                            file_path=file_path,
-                            file_type=ext or sdoc.file_type or 'pdf',
-                            conversation_id=conversation.pk,
-                            original_filename=sdoc.original_filename or os.path.basename(file_path),
-                        )
-                        logger.info(f"[SSE Pipeline] Re-indexed {sdoc.file}: {re_result}")
-                    except Exception as reindex_err:
-                        logger.error(f"[SSE Pipeline] Re-index failed for {sdoc.file}: {reindex_err}")
-
-                # Retry search after re-indexing
-                results = vector_utils.search_session_documents(query, conversation.pk, top_k=20)
-                logger.info(f"[SSE Pipeline] After re-index: {len(results)} results")
-
-                # Last resort: extract raw text directly from file
-                if not results:
-                    logger.warning("[SSE Pipeline] Search still empty — using raw text extraction fallback")
-                    for sdoc in processed_docs[:1]:
-                        try:
-                            file_path = sdoc.file.path
-                            ext = os.path.splitext(file_path)[1].lower().lstrip('.')
-                            raw_text = vector_utils.extract_text_from_file(file_path, ext or 'pdf')
-                            if raw_text and raw_text.strip():
-                                # Use first 8000 chars as context
-                                fname = sdoc.original_filename or os.path.basename(file_path)
-                                session_context = f"[Upload 1: {fname}]\n{raw_text[:8000]}"
-                                logger.info(f"[SSE Pipeline] Raw text fallback: {len(session_context)} chars")
-                        except Exception as raw_err:
-                            logger.error(f"[SSE Pipeline] Raw text extraction failed: {raw_err}")
-
-            if results and not session_context:
-                # ── Step 4: Retrieve Top Chunks ───────────────────
-                logger.info(f"[SSE Pipeline] Step 4 | Retrieved {len(results)} session chunks")
-                source_filename = results[0].get("source", "uploaded document")
-                parts = []
-                for i, r in enumerate(results, 1):
-                    src = r.get("source", "uploaded file")
-                    parts.append(f"[Upload {i}: {src}]\n{r['content']}")
-                session_context = "\n\n---\n\n".join(parts)
-
-        if is_question and not session_context:
-            # Priority 2: knowledge-base ChromaDB collection
-            logger.info("[SSE Pipeline] Step 3 | Searching knowledge-base ChromaDB collection")
-            query_type = classify_query_type(query)
-            chunks = dual_retrieval_search(query, query_type=query_type, top_k=15)
-            if chunks:
-                # ── Step 4: Retrieve Top Chunks ───────────────────
-                logger.info(f"[SSE Pipeline] Step 4 | Retrieved {len(chunks)} KB chunks")
-                parts = []
-                for i, ch in enumerate(chunks, 1):
-                    src = ch.get("metadata", {}).get("document_title",
-                          ch.get("metadata", {}).get("source", "unknown"))
-                    parts.append(f"[Source {i}: {src}]\n{ch['content']}")
-                kb_context = "\n\n---\n\n".join(parts)
-
-        # ── Step 5: Send Context + Question to LLM ────────────────
-        config = AgentPromptConfig.objects.first()
-        custom_prompt = ""
-        if config and config.custom_prompt:
-            custom_prompt = config.custom_prompt + "\n\n"
-
-        if session_context:
-            system_msg = (
-                f"{custom_prompt}"
-                "You are ArthaCore AI, analyzing the user's uploaded document.\n\n"
-                "📋 SOURCE RULES:\n"
-                "- Ground ALL answers in the document content below\n"
-                "- You MAY synthesize across sections\n"
-                "- You MUST NOT add external knowledge\n"
-                "- Cite with [Upload N] notation\n"
-                "- If not in document: \"Not mentioned in the documents.\"\n"
-                "- Use Markdown formatting for clarity\n\n"
-                f"## Uploaded Document Context\n\n{session_context}"
-            )
-        elif kb_context:
-            system_msg = (
-                f"{custom_prompt}"
-                "You are ArthaCore AI, answering from knowledge base documents.\n\n"
-                "RULES:\n"
-                "- Base answers ONLY on the provided context\n"
-                "- If the context doesn't contain the answer, say so honestly\n"
-                "- Cite sources with [Source N] notation\n"
-                "- Use Markdown formatting for clarity\n\n"
-                f"## Retrieved Context\n\n{kb_context}"
-            )
-        else:
-            system_msg = (
-                f"{custom_prompt}"
-                "You are ArthaCore AI, a helpful AI assistant.\n"
-                "Answer user questions clearly and concisely using Markdown formatting."
-            )
-        logger.info("[SSE Pipeline] Step 5 | Context assembled, beginning LLM stream")
-
-        # Build recent chat history
+        # ── Step 1: Build Chat History ────────────────────────────
         recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
         recent_msgs.reverse()
-        chat_history = [SystemMessage(content=system_msg)]
+        chat_history = []
         for m in recent_msgs:
-            if m.role == "user":
+            if m.role == 'user':
                 chat_history.append(HumanMessage(content=m.content))
-            elif m.role == "assistant":
+            elif m.role == 'assistant':
                 chat_history.append(AIMessage(content=m.content))
-        chat_history.append(HumanMessage(content=query))
 
-        # ── Step 6: LLM Call → strip think-blocks → word-stream to client ──
-        # Using invoke() instead of stream() so that Qwen3's <think>…</think>
-        # block is fully buffered first — guaranteeing the actual answer always
-        # reaches the client even when thinking consumes many tokens.
-        raw_response = stream_llm.invoke(chat_history)
-        raw_content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
-        clean_response = _strip_think_tags(raw_content)
-        if not clean_response.strip():
-            # Safety net: strip removed everything (all-think response) — show raw
-            clean_response = raw_content.strip()
-
-        logger.info(
-            f"[SSE Pipeline] Step 6 | LLM done "
-            f"({len(raw_content)} raw → {len(clean_response)} clean chars)"
+        # ── Step 2: Get Agent with Registered Tools ───────────────
+        # Agent has: search_uploaded_documents (P1) + search_knowledge_base (P2)
+        logger.info("[SSE Pipeline] Step 2 | Creating LangChain agent with tool-call support")
+        agent = get_conversational_agent(
+            conversation_id=conversation.pk,
+            user=conversation.user,
         )
 
-        # Emit word-by-word so the UI shows a live-streaming effect
+        clean_response = ""
+
+        if agent:
+            # ── Step 3: Agent Invokes Tools & Generates Response ──────
+            # Agent autonomously decides which tool(s) to call
+            logger.info("[SSE Pipeline] Step 3 | Agent invoking tools via tool-call")
+            result = agent.invoke({
+                "input": query,
+                "chat_history": chat_history,
+            })
+
+            # Log which tools were called
+            steps = result.get("intermediate_steps", [])
+            for step in steps:
+                if hasattr(step[0], 'tool'):
+                    logger.info(
+                        f"[SSE Pipeline] Tool called: {step[0].tool!r} "
+                        f"| Input: {str(step[0].tool_input)[:80]!r}"
+                    )
+
+            raw = result.get("output", "")
+            clean_response = _strip_think_tags(raw)
+            logger.info(f"[SSE Pipeline] Step 4 | Agent response ready ({len(clean_response)} chars)")
+
+        # ── Step 4: Fallback if agent returned nothing ────────────
+        if not clean_response.strip():
+            logger.warning("[SSE Pipeline] Agent returned empty — falling back to general chat")
+            clean_response = _general_chat_response(query, conversation)
+
+        # ── Step 5: Word-by-Word SSE Stream → Client ─────────────
+        logger.info("[SSE Pipeline] Step 5 | Streaming response word-by-word")
         words = clean_response.split(' ')
         for i, word in enumerate(words):
             token = word if i == len(words) - 1 else word + ' '
             escaped = json.dumps(token)
             yield f'data: {{"type": "token", "content": {escaped}}}\n\n'
 
-        # ── Step 7: Final Answer saved & confirmed ────────────────
-        logger.info(f"[SSE Pipeline] Step 7 | Stream complete ({len(clean_response)} chars)")
+        # ── Step 6: Save & Confirm ────────────────────────────────
+        logger.info(f"[SSE Pipeline] Step 6 | Stream complete ({len(clean_response)} chars)")
         ConversationMessage.objects.create(
             conversation=conversation,
             role='assistant',

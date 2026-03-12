@@ -227,10 +227,10 @@ EMAIL_USE_TLS = True
 
 APPEND_SLASH = False
 
-# ##### AI / OPENROUTER CONFIGURATION #########################
+# ##### AI CONFIGURATION #########################
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyCvRTzBvYHJifvJe7fu8_XClC088BeN41o')
-OPENROUTER_API_KEY = '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'
-OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-OPENROUTER_MODEL = 'mistralai/mistral-small-3.1-24b-instruct:free'
+
+# ##### HUGGING FACE CONFIGURATION ############################
+HF_API_KEY = os.environ.get('HF_API_KEY', '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')
+HF_MODEL_ID = os.environ.get('HF_MODEL_ID', 'Qwen/Qwen2.5-7B-Instruct')
 

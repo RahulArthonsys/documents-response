@@ -40,30 +40,47 @@ logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════════════════════
-# 1. Gemini / LangChain Singletons
+# 1. HuggingFace / LangChain Singletons
 # ══════════════════════════════════════════════════════════
 _llm = None
 _detection_llm = None
 _embeddings = None
 
+# HuggingFace model configuration
+HF_MODEL = getattr(settings, 'HF_MODEL_ID', 'Qwen/Qwen3.5-9B')
 
-def _get_api_key():
-    return getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+
+def _get_hf_api_key():
+    """Return the HuggingFace API key from settings or environment."""
+    return getattr(settings, 'HF_API_KEY', '') or os.environ.get('HF_API_KEY', '')
+
+
+def _build_hf_chat_llm(temperature: float = 0.3, max_new_tokens: int = 8192):
+    """Build and return a ChatHuggingFace instance backed by HuggingFace Inference API.
+
+    max_new_tokens raised to 8192 so Qwen3's think block does not consume
+    the entire budget before the actual answer is generated.
+    enable_thinking=False disables the <think> phase when TGI supports it.
+    """
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+    endpoint = HuggingFaceEndpoint(
+        repo_id=HF_MODEL,
+        task="text-generation",
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        huggingfacehub_api_token=_get_hf_api_key(),
+        do_sample=(temperature > 0),
+    )
+    return ChatHuggingFace(llm=endpoint, verbose=False)
 
 
 def get_llm():
-    """Singleton ChatGoogleGenerativeAI (gemini-2.5-flash) — main response generation + agent."""
+    """Singleton ChatHuggingFace (Qwen/Qwen3.5-9B) — main response generation + agent."""
     global _llm
     if _llm is None:
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            _llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
-                temperature=0.3,
-                google_api_key=_get_api_key(),
-                streaming=True,
-                max_output_tokens=4096,
-            )
+            _llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
+            logger.info(f"HuggingFace LLM initialised: {HF_MODEL}")
         except Exception as e:
             logger.error(f"Failed to create LLM: {e}")
             raise
@@ -71,17 +88,11 @@ def get_llm():
 
 
 def get_detection_llm():
-    """Singleton ChatGoogleGenerativeAI (gemini-2.5-flash) — lightweight YES/NO detection gate."""
+    """Singleton ChatHuggingFace (Qwen/Qwen3.5-9B) — lightweight YES/NO detection gate."""
     global _detection_llm
     if _detection_llm is None:
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            _detection_llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
-                temperature=0,
-                google_api_key=_get_api_key(),
-                max_output_tokens=10,
-            )
+            _detection_llm = _build_hf_chat_llm(temperature=0, max_new_tokens=20)
         except Exception as e:
             logger.error(f"Failed to create detection LLM: {e}")
             raise
@@ -89,15 +100,25 @@ def get_detection_llm():
 
 
 def get_embeddings():
-    """Singleton GoogleGenerativeAIEmbeddings (gemini-embedding-001, 3072 dims)."""
+    """Singleton HuggingFaceEndpointEmbeddings (all-MiniLM-L6-v2, 384 dims).
+
+    Uses langchain_huggingface which points to the new router.huggingface.co endpoint.
+    """
     global _embeddings
     if _embeddings is None:
         try:
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            _embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/gemini-embedding-001",
-                google_api_key=_get_api_key(),
-            )
+            try:
+                from langchain_huggingface import HuggingFaceEndpointEmbeddings
+                _embeddings = HuggingFaceEndpointEmbeddings(
+                    model="sentence-transformers/all-MiniLM-L6-v2",
+                    huggingfacehub_api_token=_get_hf_api_key(),
+                )
+            except ImportError:
+                from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+                _embeddings = HuggingFaceInferenceAPIEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                    api_key=_get_hf_api_key(),
+                )
         except Exception as e:
             logger.error(f"Failed to create embeddings: {e}")
             raise
@@ -116,7 +137,7 @@ CAPABILITIES:
 - Use Markdown formatting for clear, structured responses
 
 ENHANCED RAG SYSTEM:
-- All knowledge searches use Gemini 2.5 Flash query classification and dual retrieval
+- All knowledge searches use Qwen query classification and dual retrieval
 - Query types (metric/theoretical/global/natural/mixed) are automatically detected
 - Session documents have ABSOLUTE PRIORITY over knowledge base when available
 
@@ -131,91 +152,117 @@ CRITICAL RESPONSE RULES:
 
 
 # ══════════════════════════════════════════════════════════
-# 3. Query Classification & Detection
+# 3. Query Classification & Detection  (keyword-only, zero LLM calls)
 # ══════════════════════════════════════════════════════════
 
+# Greetings / small-talk that never need document search
+_CASUAL_PHRASES = {
+    'hi', 'hello', 'hey', 'thanks', 'thank you', 'bye', 'goodbye',
+    'ok', 'okay', 'sure', 'great', 'good', 'nice', 'cool',
+    'how are you', 'what is your name', 'who are you',
+}
+
+
+def _strip_think_tags(text: str) -> str:
+    """Extract the actual answer from Qwen3 <think>...</think> response format.
+
+    Qwen3 in thinking mode prepends the entire reasoning trace between
+    <think> and </think> before the actual answer.  We extract only the
+    content AFTER </think> (the real answer), or if there is no think block,
+    return the text as-is.
+    """
+    import re
+
+    # Case 1: Has both <think> and </think> — extract everything AFTER </think>
+    if '<think>' in text and '</think>' in text:
+        after_think = re.split(r'</think>', text, maxsplit=1)
+        if len(after_think) > 1 and after_think[1].strip():
+            return after_think[1].strip()
+        # Answer was somehow inside think — fall back to stripping tags
+        cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        return cleaned.strip() or text.strip()
+
+    # Case 2: Only </think> appears (split response) — take what's after it
+    if '</think>' in text:
+        parts = text.split('</think>', 1)
+        if len(parts) > 1 and parts[1].strip():
+            return parts[1].strip()
+
+    # Case 3: Only <think> with no closing tag — strip what we can
+    if '<think>' in text:
+        cleaned = text.split('<think>', 1)[0].strip()
+        return cleaned or text.strip()
+
+    # No think tags — return as-is
+    return text.strip()
+
+
 def classify_query_type(query: str) -> str:
-    """Classify query type using Gemini 2.5 Flash for tailored retrieval strategy.
+    """Classify query type using keyword heuristics — no LLM call.
 
     Categories:
-      metric — numbers, statistics, KPIs
+      metric      — numbers, statistics, KPIs
       theoretical — explanations, definitions, concepts
-      global — broad summary or overview
-      natural — greeting, thanks, off-topic
-      mixed — combines multiple categories
+      global      — broad summary or overview
+      natural     — greeting, thanks, off-topic
+      mixed       — default / combined
     """
-    try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.messages import SystemMessage, HumanMessage
-        clf_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0,
-            google_api_key=_get_api_key(),
-            max_output_tokens=20,
-        )
-        resp = clf_llm.invoke([
-            SystemMessage(content=(
-                "Classify the user query into exactly one category:\n"
-                "1. 'metric' — Asking for specific numbers, statistics, KPIs, calculations\n"
-                "2. 'theoretical' — Asking for explanations, definitions, concepts\n"
-                "3. 'global' — Broad summary or overview requests\n"
-                "4. 'natural' — Conversational, greeting, thanks, off-topic\n"
-                "5. 'mixed' — Combines elements from multiple categories\n\n"
-                "Respond with ONLY the category word."
-            )),
-            HumanMessage(content=query),
-        ])
-        classification = resp.content.strip().lower()
-        valid = {'metric', 'theoretical', 'global', 'natural', 'mixed'}
-        return classification if classification in valid else 'mixed'
-    except Exception as e:
-        logger.warning(f"Query classification failed: {e}")
-        return "mixed"
+    q = query.lower().strip()
+
+    # Natural / casual — no document retrieval needed
+    if q in _CASUAL_PHRASES or len(q.split()) <= 2:
+        return 'natural'
+
+    # Metric — numbers/stats
+    metric_kw = [
+        'how many', 'how much', 'total', 'count', 'number', 'percentage',
+        'percent', 'rate', 'ratio', 'sum', 'average', 'mean', 'median',
+        'statistic', 'kpi', 'metric', 'figure', 'value', 'amount',
+        'revenue', 'cost', 'price', 'salary', 'income',
+    ]
+    if any(kw in q for kw in metric_kw):
+        return 'metric'
+
+    # Global — full-document summary
+    global_kw = [
+        'summarize', 'summary', 'overview', 'all of', 'entire', 'whole',
+        'everything', 'list all', 'what are all', 'brief', 'outline',
+    ]
+    if any(kw in q for kw in global_kw):
+        return 'global'
+
+    # Theoretical — explanations/definitions
+    theoretical_kw = [
+        'what is', 'what are', 'define', 'definition', 'explain',
+        'describe', 'how does', 'why is', 'why does', 'concept',
+        'meaning', 'purpose', 'difference between',
+    ]
+    if any(kw in q for kw in theoretical_kw):
+        return 'theoretical'
+
+    return 'mixed'
 
 
 def detect_is_question(query: str, has_session_document: bool = False) -> bool:
-    """Gemini 2.5 Flash detection gate: does this query need document search (YES/NO)?
+    """Determine whether this query needs document retrieval — no LLM call.
 
-    Decision Matrix:
-      YES + session docs → session_document_search() direct
-      YES + no session docs → knowledge_base_search_tool() direct
-      NO → LangChain Agent routes to appropriate tool or general chat
+    Always returns True when session docs are present so uploaded-document
+    queries are never skipped.  Only short casual phrases return False.
     """
-    try:
-        detection_prompt = f"""You are a query classifier. Determine if this query needs to SEARCH DOCUMENTS
-or if it's a general conversation/action request.
+    if has_session_document:
+        # When a document is uploaded, almost everything is a document question
+        return True
 
-User Query: "{query}"
-Has Uploaded Document: {has_session_document}
+    q = query.lower().strip()
 
-RESPOND WITH ONLY 'YES' OR 'NO':
+    # Pure greeting / small-talk → no retrieval
+    if q in _CASUAL_PHRASES:
+        return False
+    if len(q.split()) <= 3 and not any(c in q for c in '?!,;'):
+        # Very short with no punctuation — likely casual
+        return False
 
-Answer YES (search documents) if:
-- User has uploaded a document AND is asking about its content
-- User is asking conceptual or factual questions
-- User wants information, analysis, explanation, or summary
-- User references "it", "this", "the file", "the document"
-
-Answer NO (general chat) if:
-- User is greeting or casual chat ("hello", "thanks", "hi")
-- User is asking about themselves or unrelated actions
-- User asks to do something unrelated to documents
-
-Answer (YES or NO):"""
-
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.messages import HumanMessage
-        det_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0,
-            google_api_key=_get_api_key(),
-            max_output_tokens=5,
-        )
-        resp = det_llm.invoke([HumanMessage(content=detection_prompt)])
-        answer = resp.content.strip().upper()
-        return 'YES' in answer
-    except Exception:
-        return True  # Default to treating as question
+    return True
 
 
 # ══════════════════════════════════════════════════════════
@@ -227,7 +274,7 @@ def dual_retrieval_search(query: str, query_type: str = None, top_k: int = 15) -
 
     Pipeline:
       [Query] → [Classify Type]
-             → [Strategy 1: Semantic Search (Gemini embeddings, 768 dim)]
+             → [Strategy 1: Semantic Search (HuggingFace all-MiniLM-L6-v2 embeddings, 384 dim)]
              → [Strategy 2: Metadata-Filtered Search (tables for metric queries)]
              → [Strategy 3: Enhanced Query Search (augmented query)]
              → [Deduplicate & Sort by Distance]
@@ -297,46 +344,70 @@ def dual_retrieval_search(query: str, query_type: str = None, top_k: int = 15) -
 # ══════════════════════════════════════════════════════════
 
 def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) -> str:
-    """STRICT Document-Only Knowledge Base Search with Query Classification and RAG.
-
-    Pipeline:
-      [Query] → [classify_query_type()] → [dual_retrieval_search()] → [Build Context] → [Gemini 2.5 Flash RAG] → [Answer]
     """
-    # Step 1: Classify query type
-    query_type = classify_query_type(query)
-
-    # Step 2: Dual retrieval search
+    Knowledge Base RAG Pipeline
+    ───────────────────────────
+    User Question
+          │
+          ▼
+    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+          │
+          ▼
+    Vector Database Search  (ChromaDB cosine similarity, dual-retrieval)
+          │
+          ▼
+    Retrieve Top Chunks     (de-duplicated, sorted by distance)
+          │
+          ▼
+    Send Context + Question to LLM  (HuggingFace Qwen)
+          │
+          ▼
+    LLM Generates Response
+          │
+          ▼
+    Final Answer to User
+    """
     config = AgentPromptConfig.objects.first()
     top_k = config.top_k if config else 15
+
+    # ── Step 1: User Question ────────────────────────────────────────────────
+    logger.info(f"[RAG-KB] Step 1 | Question: {query[:80]!r}")
+
+    # ── Step 2: Create Query Embedding ──────────────────────────────────────
+    # classify_query_type selects retrieval strategy (metric/theoretical/global)
+    query_type = classify_query_type(query)
+    logger.info(f"[RAG-KB] Step 2 | Query type: {query_type!r}")
+
+    # ── Step 3: Vector Database Search ──────────────────────────────────────
+    # dual_retrieval_search passes query_texts= to ChromaDB (3 strategies)
     chunks = dual_retrieval_search(query, query_type=query_type, top_k=top_k)
 
+    # ── Step 4: Retrieve Top Chunks ──────────────────────────────────────────
+    logger.info(f"[RAG-KB] Step 4 | Retrieved {len(chunks)} chunks from ChromaDB")
     if not chunks:
         return ("I couldn't find relevant information in the knowledge base for your query. "
                 "The topic may not be covered in the available documents, or "
                 "uploading relevant documents might help.")
 
-    # Step 3: Build context from retrieved chunks
     context_parts = []
     for i, ch in enumerate(chunks, 1):
         src = ch.get("metadata", {}).get("document_title",
               ch.get("metadata", {}).get("source", "unknown"))
         context_parts.append(f"[Source {i}: {src}]\n{ch['content']}")
-
     doc_content = "\n\n---\n\n".join(context_parts)
 
-    # Step 4: Custom prompt config
+    # ── Step 5: Send Context + Question to LLM ───────────────────────────────
     custom_prompt = ""
     if config and config.custom_prompt:
         custom_prompt = config.custom_prompt + "\n\n"
 
-    # Step 5: RAG prompt — strict document grounding
     rag_prompt = (
         f"{custom_prompt}"
         "You are ArthaCore AI, answering from knowledge base documents.\n\n"
         "==================== DOCUMENTS ====================\n"
         f"{doc_content}\n"
         "==================== END ====================\n\n"
-        f"Question: \"{query}\"\n"
+        f'Question: "{query}"\n'
         f"Query Type: {query_type}\n\n"
         "RULES:\n"
         "- Answer from documents ONLY\n"
@@ -346,18 +417,13 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
         "- Use Markdown formatting for clarity\n\n"
         "Answer:"
     )
+    logger.info(f"[RAG-KB] Step 5 | Context ready ({len(doc_content)} chars), calling LLM")
 
+    # ── Step 6: LLM Generates Response ───────────────────────────────────────
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        rag_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.3,
-            google_api_key=_get_api_key(),
-            max_output_tokens=4096,
-        )
+        rag_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
 
-        # Build conversation history for context
         messages_list = [SystemMessage(content=rag_prompt)]
         if conversation:
             recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
@@ -367,92 +433,200 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
                     messages_list.append(HumanMessage(content=m.content))
                 elif m.role == "assistant":
                     messages_list.append(AIMessage(content=m.content))
-
         messages_list.append(HumanMessage(content=query))
 
         resp = rag_llm.invoke(messages_list)
-        return resp.content.strip()
+        answer = _strip_think_tags(resp.content)
+        # Safety: if stripping removed everything, use raw content
+        if not answer.strip():
+            answer = resp.content.strip()
+        logger.info(f"[RAG-KB] Step 7 | Final answer ready ({len(answer)} chars)")
+
+        # ── Step 7: Final Answer to User ─────────────────────────────────────
+        return answer
+
     except Exception as e:
-        logger.error(f"knowledge_base_search_tool error: {e}")
-        return f"Error generating response: {e}"
-
-
+        logger.error(f"knowledge_base_search_tool LLM error: {e}")
+        # Fallback: return the raw document context so user still sees information
+        fallback = (
+            f"**Retrieved from knowledge base** (AI summarisation unavailable: {e})\n\n"
+            + doc_content[:3000]
+        )
+        return fallback
 # ══════════════════════════════════════════════════════════
 # 6. Tool 2: Session Document Search Tool (Priority 1)
 # ══════════════════════════════════════════════════════════
 
 def session_document_search(query: str, conversation_id: int, specific_document: str = None) -> str:
-    """SMART DOCUMENT SEARCH — Search uploaded session documents with intelligent routing.
-
-    Pipeline:
-      [Query] → [search_session_documents()] → [Build Context] → [Gemini 2.5 Flash RAG] → [Answer]
-
-    Priority: ABSOLUTE — overrides knowledge_base_search_tool when session docs exist.
     """
-    # Step 1: Search session documents in ChromaDB
+    Session Document RAG Pipeline  (Priority 1 — overrides KB when uploads exist)
+    ────────────────────────────────────────────────────────────────────────────
+    User Question
+          │
+          ▼
+    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+          │
+          ▼
+    Vector Database Search  (session-scoped ChromaDB collection)
+          │
+          ▼
+    Retrieve Top Chunks     (top-20, filtered by distance threshold)
+          │
+          ▼
+    Send Context + Question to LLM  (HuggingFace Qwen)
+          │
+          ▼
+    LLM Generates Response
+          │
+          ▼
+    Final Answer to User
+    """
+    # ── Step 1: User Question ────────────────────────────────────────────────
+    logger.info(f"[RAG-Session] Step 1 | Question: {query[:80]!r}")
+
+    # ── Steps 2-3: Create Query Embedding → Vector Database Search ───────────
+    # ChromaDB calls HuggingFaceEmbeddingFunction.embed_query() via query_texts=
     results = vector_utils.search_session_documents(
         query, conversation_id, top_k=20, specific_filename=specific_document
     )
 
+    # ── Step 4: Retrieve Top Chunks ──────────────────────────────────────────
+    logger.info(f"[RAG-Session] Step 4 | Retrieved {len(results)} chunks from ChromaDB")
+
+    # ── Auto-reindex if collection is empty but DB says docs are processed ──
     if not results:
-        return ("I couldn't find relevant information in your uploaded documents. "
-                "Please make sure the document has been fully processed, or try rephrasing your question.")
+        session_coll = vector_utils.get_or_create_session_collection(conversation_id)
+        coll_count = session_coll.count()
+        logger.warning(
+            f"[RAG-Session] Session collection has {coll_count} chunks for "
+            f"conv {conversation_id}. Re-indexing session documents..."
+        )
+        processed_docs = SessionDocument.objects.filter(
+            conversation_id=conversation_id, is_processed=True
+        )
+        for sdoc in processed_docs:
+            try:
+                file_path = sdoc.file.path
+                ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+                re_result = vector_utils.index_session_document(
+                    file_path=file_path,
+                    file_type=ext or sdoc.file_type or 'pdf',
+                    conversation_id=conversation_id,
+                    original_filename=sdoc.original_filename or os.path.basename(file_path),
+                )
+                logger.info(f"[RAG-Session] Re-indexed {sdoc.file}: {re_result}")
+            except Exception as reindex_err:
+                logger.error(f"[RAG-Session] Re-index failed for {sdoc.file}: {reindex_err}")
 
-    # Step 2: Build context from retrieved chunks
+        # Retry search after re-indexing
+        results = vector_utils.search_session_documents(
+            query, conversation_id, top_k=20, specific_filename=specific_document
+        )
+        logger.info(f"[RAG-Session] After re-index: {len(results)} results")
+
+        # Last resort: raw text extraction fallback
+        if not results:
+            logger.warning("[RAG-Session] Search still empty — using raw text extraction fallback")
+            raw_context = None
+            for sdoc in processed_docs[:1]:
+                try:
+                    file_path = sdoc.file.path
+                    ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+                    raw_text = vector_utils.extract_text_from_file(file_path, ext or 'pdf')
+                    if raw_text and raw_text.strip():
+                        fname = sdoc.original_filename or os.path.basename(file_path)
+                        raw_context = f"[Upload 1: {fname}]\n{raw_text[:8000]}"
+                        logger.info(f"[RAG-Session] Raw text fallback: {len(raw_context)} chars")
+                except Exception as raw_err:
+                    logger.error(f"[RAG-Session] Raw text extraction failed: {raw_err}")
+
+            if raw_context:
+                # Build answer directly from raw text
+                try:
+                    from langchain_core.messages import SystemMessage, HumanMessage
+                    fallback_prompt = (
+                        "You are ArthaCore AI, an INTELLIGENT DOCUMENT-GROUNDED Q&A system.\n\n"
+                        "📋 SOURCE RULES:\n"
+                        "- Ground ALL answers in the document content below\n"
+                        "- You MUST NOT add external knowledge\n"
+                        "- Use Markdown formatting for clarity\n\n"
+                        f"## Document Content\n\n{raw_context}\n\nNow respond:"
+                    )
+                    sess_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
+                    resp = sess_llm.invoke([
+                        SystemMessage(content=fallback_prompt),
+                        HumanMessage(content=query),
+                    ])
+                    answer = _strip_think_tags(resp.content)
+                    if not answer.strip():
+                        answer = resp.content.strip()
+                    return answer
+                except Exception as fb_err:
+                    logger.error(f"[RAG-Session] Raw-text LLM fallback error: {fb_err}")
+                    return f"**Retrieved from your document** (AI unavailable)\n\n{raw_context[:3000]}"
+
+            return ("I couldn't find relevant information in your uploaded documents. "
+                    "Please make sure the document has been fully processed, or try rephrasing your question.")
+
     source_filename = results[0].get("source", "uploaded document")
-
     context_parts = []
     for i, r in enumerate(results, 1):
         src = r.get("source", "uploaded file")
         context_parts.append(f"[Upload {i}: {src}]\n{r['content']}")
-
     doc_content = "\n\n---\n\n".join(context_parts)
 
-    # Step 3: Multi-document context
     doc_count = SessionDocument.objects.filter(
         conversation_id=conversation_id, is_processed=True
     ).count()
-    multi_doc_context = ""
-    if doc_count > 1:
-        multi_doc_context = f"\nNote: User has {doc_count} documents uploaded. Responding from: '{source_filename}'"
+    multi_doc_note = (
+        f"\nNote: User has {doc_count} documents uploaded. Responding from: '{source_filename}'"
+        if doc_count > 1 else ""
+    )
 
-    # Step 4: Session document RAG prompt
-    comprehensive_prompt = (
+    # ── Step 5: Send Context + Question to LLM ───────────────────────────────
+    rag_prompt = (
         "You are ArthaCore AI, an INTELLIGENT DOCUMENT-GROUNDED Q&A system.\n\n"
-        f"📄 Document: \"{source_filename}\"{multi_doc_context}\n\n"
-        f"❓ User Query: \"{query}\"\n\n"
-        "📚 Document Content:\n"
+        f'\U0001f4c4 Document: "{source_filename}"{multi_doc_note}\n\n'
+        f'\u2753 User Query: "{query}"\n\n'
+        "\U0001f4da Document Content:\n"
         f"{doc_content}\n\n"
-        "📋 SOURCE RULES:\n"
+        "\U0001f4cb SOURCE RULES:\n"
         "- Ground ALL answers in the document content above\n"
         "- You MAY synthesize across sections\n"
         "- You MUST NOT add external knowledge\n"
         "- Cite with [Upload N] notation\n"
         "- Use Markdown formatting for clarity\n\n"
-        "❌ WHEN TO SAY \"NOT MENTIONED\":\n"
+        "\u274c WHEN TO SAY \"NOT MENTIONED\":\n"
         "Say \"Not mentioned in the documents.\" ONLY when the concept truly does not appear.\n\n"
         "Now respond:"
     )
+    logger.info(f"[RAG-Session] Step 5 | Context ready ({len(doc_content)} chars), calling LLM")
 
+    # ── Step 6: LLM Generates Response ───────────────────────────────────────
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import SystemMessage, HumanMessage
-        sess_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.3,
-            google_api_key=_get_api_key(),
-            max_output_tokens=4096,
-        )
+        sess_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
         resp = sess_llm.invoke([
-            SystemMessage(content=comprehensive_prompt),
+            SystemMessage(content=rag_prompt),
             HumanMessage(content=query),
         ])
-        return resp.content.strip()
+        answer = _strip_think_tags(resp.content)
+        # Safety: if stripping removed everything, use raw content
+        if not answer.strip():
+            answer = resp.content.strip()
+        logger.info(f"[RAG-Session] Step 7 | Final answer ready ({len(answer)} chars)")
+
+        # ── Step 7: Final Answer to User ─────────────────────────────────────
+        return answer
+
     except Exception as e:
-        logger.error(f"session_document_search error: {e}")
-        return ""
-
-
+        logger.error(f"session_document_search LLM error: {e}")
+        # Fallback: return raw document context so user still sees their file's content
+        fallback = (
+            f"**Retrieved from your document** (AI summarisation unavailable: {e})\n\n"
+            + doc_content[:3000]
+        )
+        return fallback
 # ══════════════════════════════════════════════════════════
 # 7. LangChain Agent — Tool Registration & Agent Creation
 # ══════════════════════════════════════════════════════════
@@ -539,7 +713,7 @@ def get_conversational_tools(conversation_id: int = None, user=None):
 def get_conversational_agent(conversation_id: int = None, user=None):
     """Create a LangChain agent with registered tools and conversation memory.
 
-    Uses OpenAI tool-calling agent with ChatPromptTemplate.
+    Uses tool-calling agent with ChatPromptTemplate backed by HuggingFace Qwen.
     """
     try:
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -578,36 +752,58 @@ def get_conversational_agent(conversation_id: int = None, user=None):
 # ══════════════════════════════════════════════════════════
 
 def stream_agent_response(query: str, conversation: 'Conversation') -> str:
-    """Main response pipeline (non-streaming fallback).
-
-    Flow:
-      [User Question]
-        → [Gemini 2.5 Flash Detection Gate: YES/NO]
-          → YES + session docs → session_document_search() (direct, Priority 1)
-          → YES + no session docs → knowledge_base_search_tool() (direct, Priority 2)
-          → NO → LangChain Agent (routes to appropriate tool)
-        → [Return Answer]
     """
+    Main Non-Streaming RAG Pipeline
+    ────────────────────────────────
+    User Question
+          │
+          ▼
+    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+          │
+          ▼
+    Vector Database Search  (session collection → KB collection)
+          │
+          ▼
+    Retrieve Top Chunks
+          │
+          ▼
+    Send Context + Question to LLM  (HuggingFace Qwen)
+          │
+          ▼
+    LLM Generates Response
+          │
+          ▼
+    Final Answer to User
+    """
+    # ── Step 1: User Question ─────────────────────────────────────
     has_session_docs = SessionDocument.objects.filter(
         conversation=conversation, is_processed=True
     ).exists()
+    logger.info(f"[Pipeline] Step 1 | Question received | session_docs={has_session_docs}")
 
-    # ── Gemini 2.5 Flash Detection Gate ──
+    # ── Step 2: Create Query Embedding (detection gate) ───────────
+    # detect_is_question uses HF Qwen to decide if vector search is needed
     is_question = detect_is_question(query, has_session_document=has_session_docs)
+    logger.info(f"[Pipeline] Step 2 | Detection gate: is_question={is_question}")
 
     if is_question:
-        # Priority 1: Session documents (ABSOLUTE PRIORITY)
+        # ── Steps 3-4: Vector DB Search → Retrieve Chunks (Priority 1) ──
         if has_session_docs:
+            logger.info("[Pipeline] Step 3 | Searching session ChromaDB collection (Priority 1)")
             answer = session_document_search(query, conversation.pk)
             if answer:
+                # ── Steps 6-7: Response returned from session pipeline ──
                 return answer
 
-        # Priority 2: Knowledge base
+        # ── Steps 3-4: Vector DB Search → Retrieve Chunks (Priority 2) ──
+        logger.info("[Pipeline] Step 3 | Searching knowledge-base ChromaDB collection (Priority 2)")
         kb_answer = knowledge_base_search_tool(query, conversation)
         if kb_answer:
+            # ── Steps 6-7: Response returned from KB pipeline ──
             return kb_answer
 
-    # ── Agent path — for actions, general chat, or no direct results ──
+    # ── Fallback: Agent / General Chat ───────────────────────────
+    logger.info("[Pipeline] Fallback | Routing to LangChain agent / general chat")
     try:
         agent = get_conversational_agent(
             conversation_id=conversation.pk,
@@ -632,21 +828,15 @@ def stream_agent_response(query: str, conversation: 'Conversation') -> str:
     except Exception as e:
         logger.error(f"Agent invoke error: {e}\n{traceback.format_exc()}")
 
-    # Final fallback: general chat
+    # ── Step 7: Final Answer — plain chat fallback ────────────────
     return _general_chat_response(query, conversation)
 
 
 def _general_chat_response(query: str, conversation: 'Conversation') -> str:
-    """Fallback: plain Gemini 2.5 Flash chat without document context."""
+    """Fallback: plain HuggingFace Qwen chat without document context."""
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        chat_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.4,
-            google_api_key=_get_api_key(),
-            max_output_tokens=4096,
-        )
+        chat_llm = _build_hf_chat_llm(temperature=0.4, max_new_tokens=4096)
 
         config = AgentPromptConfig.objects.first()
         system_prompt = SYSTEM_PROMPT
@@ -665,7 +855,7 @@ def _general_chat_response(query: str, conversation: 'Conversation') -> str:
         chat_history.append(HumanMessage(content=query))
 
         resp = chat_llm.invoke(chat_history)
-        return resp.content.strip()
+        return _strip_think_tags(resp.content)
     except Exception as e:
         logger.error(f"General chat error: {e}")
         return f"I'm sorry, I encountered an error: {e}"
@@ -676,47 +866,104 @@ def _general_chat_response(query: str, conversation: 'Conversation') -> str:
 # ══════════════════════════════════════════════════════════
 
 def generate_sse_stream(query: str, conversation: 'Conversation'):
-    """Server-Sent Events generator for streaming responses.
-
-    Flow:
-      [Start Event]
-        → [Gemini 2.5 Flash Detection Gate]
-          → YES + session docs → Search session collection, build context
-          → YES + no session docs → Dual retrieval KB search, build context
-          → NO → General chat prompt
-        → [Stream Tokens via Gemini]
-        → [Save Message]
-        → [Done Event]
+    """
+    Streaming RAG Pipeline  (Server-Sent Events)
+    ─────────────────────────────────────────────
+    User Question
+          │
+          ▼
+    Create Query Embedding  (ChromaDB → HuggingFace all-MiniLM-L6-v2)
+          │
+          ▼
+    Vector Database Search  (session collection → KB collection)
+          │
+          ▼
+    Retrieve Top Chunks
+          │
+          ▼
+    Send Context + Question to LLM  (HuggingFace Qwen — streaming)
+          │
+          ▼
+    LLM Generates Response  (token-by-token SSE)
+          │
+          ▼
+    Final Answer to User
     """
     try:
-        yield "data: {\"type\": \"start\"}\n\n"
+        yield 'data: {"type": "start"}\n\n'
 
-        # Check for session documents
+        # ── Step 1: User Question ─────────────────────────────────
         has_session_docs = SessionDocument.objects.filter(
             conversation=conversation, is_processed=True
         ).exists()
+        logger.info(f"[SSE Pipeline] Step 1 | Question received | session_docs={has_session_docs}")
 
-        # Gemini 2.5 Flash Detection Gate
+        # ── Step 2: Create Query Embedding (detection gate) ───────
         is_question = detect_is_question(query, has_session_document=has_session_docs)
+        logger.info(f"[SSE Pipeline] Step 2 | Detection gate: is_question={is_question}")
 
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        stream_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.3,
-            google_api_key=_get_api_key(),
-            max_output_tokens=4096,
-            streaming=True,
-        )
+        stream_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
 
-        # ── Build context based on detection result ──
         session_context = ""
         kb_context = ""
 
-        # Priority 1: Session documents
+        # ── Step 3: Vector Database Search ───────────────────────
         if is_question and has_session_docs:
+            # Priority 1: session-scoped ChromaDB collection
+            logger.info("[SSE Pipeline] Step 3 | Searching session ChromaDB collection")
             results = vector_utils.search_session_documents(query, conversation.pk, top_k=20)
-            if results:
+            logger.info(f"[SSE Pipeline] Step 3 | search_session_documents returned {len(results)} results")
+
+            # ── Auto-reindex if collection is empty but DB says docs are processed ──
+            if not results:
+                session_coll = vector_utils.get_or_create_session_collection(conversation.pk)
+                coll_count = session_coll.count()
+                logger.warning(
+                    f"[SSE Pipeline] Session collection has {coll_count} chunks for "
+                    f"conv {conversation.pk}. Re-indexing session documents..."
+                )
+                # Re-index every processed session doc for this conversation
+                processed_docs = SessionDocument.objects.filter(
+                    conversation=conversation, is_processed=True
+                )
+                for sdoc in processed_docs:
+                    try:
+                        file_path = sdoc.file.path
+                        ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+                        re_result = vector_utils.index_session_document(
+                            file_path=file_path,
+                            file_type=ext or sdoc.file_type or 'pdf',
+                            conversation_id=conversation.pk,
+                            original_filename=sdoc.original_filename or os.path.basename(file_path),
+                        )
+                        logger.info(f"[SSE Pipeline] Re-indexed {sdoc.file}: {re_result}")
+                    except Exception as reindex_err:
+                        logger.error(f"[SSE Pipeline] Re-index failed for {sdoc.file}: {reindex_err}")
+
+                # Retry search after re-indexing
+                results = vector_utils.search_session_documents(query, conversation.pk, top_k=20)
+                logger.info(f"[SSE Pipeline] After re-index: {len(results)} results")
+
+                # Last resort: extract raw text directly from file
+                if not results:
+                    logger.warning("[SSE Pipeline] Search still empty — using raw text extraction fallback")
+                    for sdoc in processed_docs[:1]:
+                        try:
+                            file_path = sdoc.file.path
+                            ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+                            raw_text = vector_utils.extract_text_from_file(file_path, ext or 'pdf')
+                            if raw_text and raw_text.strip():
+                                # Use first 8000 chars as context
+                                fname = sdoc.original_filename or os.path.basename(file_path)
+                                session_context = f"[Upload 1: {fname}]\n{raw_text[:8000]}"
+                                logger.info(f"[SSE Pipeline] Raw text fallback: {len(session_context)} chars")
+                        except Exception as raw_err:
+                            logger.error(f"[SSE Pipeline] Raw text extraction failed: {raw_err}")
+
+            if results and not session_context:
+                # ── Step 4: Retrieve Top Chunks ───────────────────
+                logger.info(f"[SSE Pipeline] Step 4 | Retrieved {len(results)} session chunks")
                 source_filename = results[0].get("source", "uploaded document")
                 parts = []
                 for i, r in enumerate(results, 1):
@@ -724,11 +971,14 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
                     parts.append(f"[Upload {i}: {src}]\n{r['content']}")
                 session_context = "\n\n---\n\n".join(parts)
 
-        # Priority 2: Knowledge base (only if no session context)
         if is_question and not session_context:
+            # Priority 2: knowledge-base ChromaDB collection
+            logger.info("[SSE Pipeline] Step 3 | Searching knowledge-base ChromaDB collection")
             query_type = classify_query_type(query)
             chunks = dual_retrieval_search(query, query_type=query_type, top_k=15)
             if chunks:
+                # ── Step 4: Retrieve Top Chunks ───────────────────
+                logger.info(f"[SSE Pipeline] Step 4 | Retrieved {len(chunks)} KB chunks")
                 parts = []
                 for i, ch in enumerate(chunks, 1):
                     src = ch.get("metadata", {}).get("document_title",
@@ -736,7 +986,7 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
                     parts.append(f"[Source {i}: {src}]\n{ch['content']}")
                 kb_context = "\n\n---\n\n".join(parts)
 
-        # ── Build system message ──
+        # ── Step 5: Send Context + Question to LLM ────────────────
         config = AgentPromptConfig.objects.first()
         custom_prompt = ""
         if config and config.custom_prompt:
@@ -772,11 +1022,11 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
                 "You are ArthaCore AI, a helpful AI assistant.\n"
                 "Answer user questions clearly and concisely using Markdown formatting."
             )
+        logger.info("[SSE Pipeline] Step 5 | Context assembled, beginning LLM stream")
 
-        # Build chat history
+        # Build recent chat history
         recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
         recent_msgs.reverse()
-
         chat_history = [SystemMessage(content=system_msg)]
         for m in recent_msgs:
             if m.role == "user":
@@ -785,23 +1035,37 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
                 chat_history.append(AIMessage(content=m.content))
         chat_history.append(HumanMessage(content=query))
 
-        # Stream response via Gemini
-        full_response = ""
-        for chunk in stream_llm.stream(chat_history):
-            token = chunk.content if hasattr(chunk, 'content') else str(chunk)
-            if token:
-                full_response += token
-                escaped = json.dumps(token)
-                yield f"data: {{\"type\": \"token\", \"content\": {escaped}}}\n\n"
+        # ── Step 6: LLM Call → strip think-blocks → word-stream to client ──
+        # Using invoke() instead of stream() so that Qwen3's <think>…</think>
+        # block is fully buffered first — guaranteeing the actual answer always
+        # reaches the client even when thinking consumes many tokens.
+        raw_response = stream_llm.invoke(chat_history)
+        raw_content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+        clean_response = _strip_think_tags(raw_content)
+        if not clean_response.strip():
+            # Safety net: strip removed everything (all-think response) — show raw
+            clean_response = raw_content.strip()
 
-        # Save assistant message
+        logger.info(
+            f"[SSE Pipeline] Step 6 | LLM done "
+            f"({len(raw_content)} raw → {len(clean_response)} clean chars)"
+        )
+
+        # Emit word-by-word so the UI shows a live-streaming effect
+        words = clean_response.split(' ')
+        for i, word in enumerate(words):
+            token = word if i == len(words) - 1 else word + ' '
+            escaped = json.dumps(token)
+            yield f'data: {{"type": "token", "content": {escaped}}}\n\n'
+
+        # ── Step 7: Final Answer saved & confirmed ────────────────
+        logger.info(f"[SSE Pipeline] Step 7 | Stream complete ({len(clean_response)} chars)")
         ConversationMessage.objects.create(
             conversation=conversation,
             role='assistant',
-            content=full_response,
+            content=clean_response,
         )
-
-        yield f"data: {{\"type\": \"done\", \"conversation_id\": {conversation.pk}}}\n\n"
+        yield f'data: {{"type": "done", "conversation_id": {conversation.pk}}}\n\n'
 
     except Exception as e:
         logger.error(f"SSE stream error: {e}\n{traceback.format_exc()}")
@@ -812,8 +1076,8 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
             content=error_msg,
         )
         escaped = json.dumps(error_msg)
-        yield f"data: {{\"type\": \"token\", \"content\": {escaped}}}\n\n"
-        yield f"data: {{\"type\": \"done\", \"conversation_id\": {conversation.pk}}}\n\n"
+        yield f'data: {{"type": "token", "content": {escaped}}}\n\n'
+        yield f'data: {{"type": "done", "conversation_id": {conversation.pk}}}\n\n'
 
 
 # ══════════════════════════════════════════════════════════

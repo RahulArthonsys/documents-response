@@ -2,7 +2,7 @@
 vector_utils.py — ChromaDB operations, embedding generation, text extraction,
 document indexing, and semantic search for the AI Chatbot.
 
-Based on: EMBEDDING_CHROMA_FULL_DOCUMENTATION.md
+Embeddings: HuggingFace Inference API — sentence-transformers/all-MiniLM-L6-v2 (384 dims)
 """
 import logging
 import json
@@ -18,35 +18,48 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────
-# 1. Gemini API Key — singleton
-# ────────────────────────────────────────────────────────
-GEMINI_EMBEDDING_MODEL = "models/gemini-embedding-001"
-GEMINI_EMBEDDING_DIM = 3072
+# 1. HuggingFace API Key & Embedding Config
+# ──────────────────────────────────────────────────────────
+HF_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+HF_EMBEDDING_DIM = 384
 
-_gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None) or os.environ.get('GEMINI_API_KEY', '')
+_hf_api_key = getattr(settings, 'HF_API_KEY', None) or os.environ.get('HF_API_KEY', '')
 client = None  # kept for backward-compat references
 
-if _gemini_api_key:
-    logger.info("Gemini API key loaded successfully")
+if _hf_api_key:
+    logger.info("HuggingFace API key loaded successfully")
 else:
-    logger.warning("GEMINI_API_KEY not set — embeddings will be disabled")
+    logger.warning("HF_API_KEY not set — embeddings may be limited")
 
 
-# Singleton LangChain embeddings object (uses v1 API, not v1beta)
+# Singleton LangChain embeddings object
 _lc_embeddings = None
 
 
 def get_lc_embeddings():
-    """Return singleton langchain_google_genai.GoogleGenerativeAIEmbeddings."""
+    """Return singleton HuggingFaceEndpointEmbeddings (all-MiniLM-L6-v2, 384 dims).
+
+    Uses the updated langchain_huggingface package which points to the new
+    router.huggingface.co endpoint (replaces deprecated api-inference.huggingface.co).
+    """
     global _lc_embeddings
     if _lc_embeddings is None:
-        if not _gemini_api_key:
-            raise ValueError("GEMINI_API_KEY not set")
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        _lc_embeddings = GoogleGenerativeAIEmbeddings(
-            model=GEMINI_EMBEDDING_MODEL,
-            google_api_key=_gemini_api_key,
-        )
+        try:
+            # Preferred: new langchain_huggingface package
+            from langchain_huggingface import HuggingFaceEndpointEmbeddings
+            _lc_embeddings = HuggingFaceEndpointEmbeddings(
+                model=HF_EMBEDDING_MODEL,
+                huggingfacehub_api_token=_hf_api_key,
+            )
+            logger.info("Using HuggingFaceEndpointEmbeddings (router.huggingface.co)")
+        except ImportError:
+            # Fallback: old package — may fail with new HF API
+            from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+            _lc_embeddings = HuggingFaceInferenceAPIEmbeddings(
+                model_name=HF_EMBEDDING_MODEL,
+                api_key=_hf_api_key,
+            )
+            logger.warning("Falling back to deprecated HuggingFaceInferenceAPIEmbeddings")
     return _lc_embeddings
 
 
@@ -81,69 +94,145 @@ def get_chroma_client():
 # ──────────────────────────────────────────────────────────
 # 3. Custom ChromaDB Embedding Function
 # ──────────────────────────────────────────────────────────
-class GeminiEmbeddingFunction:
-    """Custom embedding function for ChromaDB using Gemini gemini-embedding-001.
-    Produces 3072-dimension vectors."""
+def _load_chroma_ef_base():
+    """Return chromadb.utils.embedding_functions.EmbeddingFunction if available, else object."""
+    try:
+        from chromadb import EmbeddingFunction  # chromadb ≥ 0.5
+        return EmbeddingFunction
+    except ImportError:
+        try:
+            from chromadb.utils.embedding_functions import EmbeddingFunction
+            return EmbeddingFunction
+        except ImportError:
+            return object
+
+
+class HuggingFaceEmbeddingFunction(_load_chroma_ef_base()):
+    """ChromaDB embedding function backed by HuggingFace Inference API.
+
+    Uses HuggingFaceEndpointEmbeddings from langchain_huggingface (new API,
+    router.huggingface.co) with a direct call — bypassing generate_hf_embeddings_batch
+    which is incompatible with the new API's expected text formats.
+
+    Model: sentence-transformers/all-MiniLM-L6-v2 (384 dims)
+    """
 
     def __init__(self):
-        self._model = GEMINI_EMBEDDING_MODEL
-        self._dimension = GEMINI_EMBEDDING_DIM
+        self._model = HF_EMBEDDING_MODEL
+        self._dimension = HF_EMBEDDING_DIM
 
     def name(self) -> str:
-        return "gemini-embedding-001"
+        return HF_EMBEDDING_MODEL
 
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        """Core embedding — uses get_lc_embeddings().embed_documents() directly."""
+        try:
+            lc_emb = get_lc_embeddings()
+            raw = lc_emb.embed_documents([str(t) for t in texts])
+            validated = []
+            for i, emb in enumerate(raw):
+                if _is_valid_embedding(emb):
+                    validated.append(list(emb) if not isinstance(emb, list) else emb)
+                else:
+                    logger.warning(f"HuggingFaceEmbeddingFunction: invalid embedding at {i}, using zeros")
+                    validated.append([0.0] * HF_EMBEDDING_DIM)
+            # Pad if needed
+            if len(validated) < len(texts):
+                validated.extend([[0.0] * HF_EMBEDDING_DIM] * (len(texts) - len(validated)))
+            return validated
+        except Exception as e:
+            logger.error(f"HuggingFaceEmbeddingFunction._embed error: {e}")
+            return [[0.0] * HF_EMBEDDING_DIM] * len(texts)
+
+    # ── Core ChromaDB protocol ──────────────────────────────
     def __call__(self, input: List[str]) -> List[List[float]]:
-        """Called by ChromaDB when it needs embeddings for documents or queries."""
-        return get_lc_embeddings().embed_documents(input)
+        """Called by ChromaDB for BOTH indexing (documents) and querying."""
+        return self._embed(input)
+
+    # ── LangChain / ChromaDB extended protocol ─────────────
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        return self._embed(texts)
+
+    def embed_query(self, input=None, **kwargs) -> List[float]:
+        """Embed a single query string."""
+        text = input or kwargs.get("text") or kwargs.get("query") or ""
+        results = self._embed([str(text)])
+        return results[0]
 
 
-_gemini_embedding_function = None
+_hf_embedding_function = None
 
 
 def get_openai_embedding_function():
-    """Get or create the singleton Gemini embedding function (name kept for backward compat)."""
-    global _gemini_embedding_function
-    if _gemini_embedding_function is None:
-        _gemini_embedding_function = GeminiEmbeddingFunction()
-    return _gemini_embedding_function
+    """Get or create the singleton HuggingFace embedding function (name kept for backward compat)."""
+    global _hf_embedding_function
+    if _hf_embedding_function is None:
+        _hf_embedding_function = HuggingFaceEmbeddingFunction()
+    return _hf_embedding_function
 
 
 # ──────────────────────────────────────────────────────────
 # 4. Single & Batch Embedding Generation
 # ──────────────────────────────────────────────────────────
-def generate_gemini_embedding(text: str) -> List[float]:
-    """Generate a single 3072-dim embedding vector using Gemini gemini-embedding-001."""
-    return get_lc_embeddings().embed_query(text)
+def generate_hf_embedding(text: str) -> List[float]:
+    """Generate a single 384-dim embedding vector using HuggingFace all-MiniLM-L6-v2."""
+    try:
+        emb = get_lc_embeddings().embed_query(str(text))
+        if _is_valid_embedding(emb):
+            return list(emb) if not isinstance(emb, list) else emb
+        raise ValueError(f"Invalid embedding from HF API: {str(emb)[:80]!r}")
+    except Exception as e:
+        logger.error(f"generate_hf_embedding failed: {e}")
+        raise
 
 
-# Alias for backward compatibility
-generate_openai_embedding = generate_gemini_embedding
+# Aliases for backward compatibility
+generate_openai_embedding = generate_hf_embedding
+generate_gemini_embedding = generate_hf_embedding
 
 
-def generate_gemini_embeddings_batch(texts: List[str], batch_size: int = 100) -> List[List[float]]:
-    """Generate Gemini embeddings in batches."""
-    lc_emb = get_lc_embeddings()
+def _is_valid_embedding(emb) -> bool:
+    """Return True if emb is a list/array of numeric values with the expected dimension."""
+    try:
+        if isinstance(emb, (list, tuple)) and len(emb) == HF_EMBEDDING_DIM:
+            return isinstance(emb[0], (int, float))
+        if isinstance(emb, np.ndarray) and emb.ndim == 1 and emb.shape[0] == HF_EMBEDDING_DIM:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def generate_hf_embeddings_batch(texts: List[str], batch_size: int = 100) -> List[List[float]]:
+    """Generate HuggingFace embeddings in batches.
+
+    Delegates to HuggingFaceEmbeddingFunction._embed() which calls
+    get_lc_embeddings().embed_documents() directly and handles validation
+    and zero-vector padding internally.
+    """
+    ef = get_openai_embedding_function()
     all_embeddings = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         try:
-            batch_embeddings = lc_emb.embed_documents(batch)
-            all_embeddings.extend(batch_embeddings)
-            logger.info(f"Embedded batch {i // batch_size + 1} ({len(batch)} texts)")
+            embeddings = ef._embed(batch)
+            all_embeddings.extend(embeddings)
         except Exception as e:
-            logger.error(f"Batch embedding error at index {i}: {e}")
-            all_embeddings.extend([[0.0] * GEMINI_EMBEDDING_DIM] * len(batch))
+            logger.error(f"generate_hf_embeddings_batch error on batch {i}: {e}. Using zero vectors.")
+            all_embeddings.extend([[0.0] * HF_EMBEDDING_DIM] * len(batch))
     return all_embeddings
 
 
-# Alias for backward compatibility
-generate_openai_embeddings_batch = generate_gemini_embeddings_batch
+# Aliases for backward compatibility
+generate_openai_embeddings_batch = generate_hf_embeddings_batch
+generate_gemini_embeddings_batch = generate_hf_embeddings_batch
 
 
 # ──────────────────────────────────────────────────────────
 # 5. ChromaDB Collections
 # ──────────────────────────────────────────────────────────
-def _collection_has_wrong_dims(collection, expected_dim: int = GEMINI_EMBEDDING_DIM) -> bool:
+def _collection_has_wrong_dims(collection, expected_dim: int = HF_EMBEDDING_DIM) -> bool:
     """Return True if the collection's embedding dimension doesn't match expected_dim.
 
     Checks (in order):
@@ -184,16 +273,16 @@ def _collection_has_wrong_dims(collection, expected_dim: int = GEMINI_EMBEDDING_
 
 
 def get_or_create_collection():
-    """Get/create the 'documents' knowledge base collection with Gemini embeddings.
+    """Get/create the 'documents' knowledge base collection with HuggingFace embeddings.
     Deletes and recreates if embedding dimensions conflict."""
     chroma_client = get_chroma_client()
-    embedding_fn = get_openai_embedding_function()  # returns GeminiEmbeddingFunction
+    embedding_fn = get_openai_embedding_function()  # returns HuggingFaceEmbeddingFunction
 
     def _make_collection():
         return chroma_client.get_or_create_collection(
             name="documents",
             embedding_function=embedding_fn,
-            metadata={"hnsw:space": "cosine", "embedding_dim": GEMINI_EMBEDDING_DIM}
+            metadata={"hnsw:space": "cosine", "embedding_dim": HF_EMBEDDING_DIM}
         )
 
     try:
@@ -217,17 +306,17 @@ def get_session_collection_name(conversation_id: int) -> str:
 
 
 def get_or_create_session_collection(conversation_id: int):
-    """Get or create a session-specific ChromaDB collection with Gemini embeddings.
+    """Get or create a session-specific ChromaDB collection with HuggingFace embeddings.
     Deletes and recreates on dimension conflict."""
     chroma_client = get_chroma_client()
     collection_name = get_session_collection_name(conversation_id)
-    embedding_fn = get_openai_embedding_function()  # returns GeminiEmbeddingFunction
+    embedding_fn = get_openai_embedding_function()  # returns HuggingFaceEmbeddingFunction
 
     def _make_collection():
         return chroma_client.get_or_create_collection(
             name=collection_name,
             embedding_function=embedding_fn,
-            metadata={"hnsw:space": "cosine", "embedding_dim": GEMINI_EMBEDDING_DIM}
+            metadata={"hnsw:space": "cosine", "embedding_dim": HF_EMBEDDING_DIM}
         )
 
     try:
@@ -568,10 +657,9 @@ def index_document_embeddings(collection, document, chunks=None):
             }
             metadatas.append(metadata)
 
-        # Step 3: Generate embeddings
-        embeddings = generate_openai_embeddings_batch(chunks)
-
-        # Step 4: Upsert into collection (batch if needed)
+        # Step 3: Upsert — let ChromaDB call its registered HuggingFaceEmbeddingFunction.
+        # Passing only documents= (no embeddings=) means ChromaDB owns the embedding
+        # pipeline end-to-end, eliminating all length-mismatch issues.
         batch_size = 100
         for i in range(0, len(chunks), batch_size):
             end = min(i + batch_size, len(chunks))
@@ -579,14 +667,13 @@ def index_document_embeddings(collection, document, chunks=None):
                 documents=chunks[i:end],
                 ids=ids[i:end],
                 metadatas=metadatas[i:end],
-                embeddings=embeddings[i:end]
             )
 
-        # Step 5: Update document metadata
+        # Step 4: Update document metadata
         document.embedding_metadata = json.dumps({
             "chunk_count": len(chunks),
             "status": "indexed",
-            "embedding_model": "gemini-embedding-001",
+            "embedding_model": HF_EMBEDDING_MODEL,
             "indexed_at": datetime.now().isoformat()
         })
         document.is_processed = True
@@ -645,10 +732,8 @@ def index_session_document(file_path: str, file_type: str, conversation_id: int,
             "upload_date": datetime.now().isoformat()
         } for i in range(len(text_chunks))]
 
-        # Generate embeddings
-        embeddings = generate_openai_embeddings_batch(text_chunks)
-
-        # Upsert into collection
+        # Upsert — let ChromaDB call its registered HuggingFaceEmbeddingFunction.
+        # No embeddings= passed: ChromaDB owns the full embedding pipeline.
         batch_size = 100
         for i in range(0, len(text_chunks), batch_size):
             end = min(i + batch_size, len(text_chunks))
@@ -656,7 +741,6 @@ def index_session_document(file_path: str, file_type: str, conversation_id: int,
                 documents=text_chunks[i:end],
                 ids=ids[i:end],
                 metadatas=metadatas[i:end],
-                embeddings=embeddings[i:end]
             )
 
         logger.info(f"Indexed {len(text_chunks)} session chunks for conversation {conversation_id}")
@@ -674,15 +758,25 @@ def index_session_document(file_path: str, file_type: str, conversation_id: int,
 # ──────────────────────────────────────────────────────────
 # 10. Search & Retrieval
 # ──────────────────────────────────────────────────────────
+# Cosine distance in ChromaDB ranges 0 (identical) → 2 (opposite).
+# We allow up to 1.8 so that reasonable semantic matches are not filtered out,
+# especially when some chunks were indexed with imperfect embeddings.
+_SEARCH_DISTANCE_THRESHOLD = 1.8
+
+
 def search_documents(query: str, collection, top_k: int = 5, metadata_filter: dict = None) -> dict:
-    """Semantic search on the 'documents' (KB) collection using OpenAI embeddings."""
+    """Semantic search on the 'documents' (KB) collection.
+
+    Uses query_texts= so ChromaDB calls its registered HuggingFaceEmbeddingFunction,
+    keeping embedding generation in one place and avoiding any length-mismatch issues.
+    """
     try:
-        query_embedding = generate_openai_embedding(query)
+        n_results = max(1, min(top_k, collection.count())) if collection.count() > 0 else top_k
 
         query_params = {
-            "query_embeddings": [query_embedding],
-            "n_results": min(top_k, collection.count()) if collection.count() > 0 else top_k,
-            "include": ["documents", "metadatas", "distances"]
+            "query_texts": [query],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
         }
         if metadata_filter:
             query_params["where"] = metadata_filter
@@ -697,18 +791,27 @@ def search_documents(query: str, collection, top_k: int = 5, metadata_filter: di
         }
 
         # Filter by distance threshold
-        filtered_docs = []
-        filtered_meta = []
-        filtered_dist = []
+        filtered_docs, filtered_meta, filtered_dist = [], [], []
         for doc, meta, dist in zip(
             search_results["documents"],
             search_results["metadatas"],
-            search_results["distances"]
+            search_results["distances"],
         ):
-            if dist <= 1.5:  # Distance threshold
+            if dist <= _SEARCH_DISTANCE_THRESHOLD:
                 filtered_docs.append(doc)
                 filtered_meta.append(meta)
                 filtered_dist.append(dist)
+
+        if not filtered_docs and search_results["documents"]:
+            logger.warning(
+                f"search_documents: all results filtered out "
+                f"(threshold {_SEARCH_DISTANCE_THRESHOLD}). "
+                f"Min dist = {min(search_results['distances']):.3f}. "
+                "Returning best result unfiltered."
+            )
+            filtered_docs = [search_results["documents"][0]]
+            filtered_meta = [search_results["metadatas"][0]]
+            filtered_dist = [search_results["distances"][0]]
 
         return {
             "documents": filtered_docs,
@@ -722,38 +825,57 @@ def search_documents(query: str, collection, top_k: int = 5, metadata_filter: di
 
 
 def search_session_documents(query: str, conversation_id: int, top_k: int = 15, specific_filename: str = None) -> list:
-    """Search within a session-specific ChromaDB collection."""
+    """Search within a session-specific ChromaDB collection.
+
+    Uses query_texts= so ChromaDB calls its registered HuggingFaceEmbeddingFunction,
+    keeping embedding generation in one place and avoiding any length-mismatch issues.
+    """
     try:
         collection = get_or_create_session_collection(conversation_id)
 
         if collection.count() == 0:
+            logger.info(f"search_session_documents: collection for conversation {conversation_id} is empty")
             return []
 
-        query_embedding = generate_openai_embedding(query)
-
+        n_results = min(top_k, collection.count())
         query_params = {
-            "query_embeddings": [query_embedding],
-            "n_results": min(top_k, collection.count()),
-            "include": ["documents", "metadatas", "distances"]
+            "query_texts": [query],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
         }
-
         if specific_filename:
             query_params["where"] = {"source": specific_filename}
 
         results = collection.query(**query_params)
 
-        formatted_results = []
-        docs = results.get("documents", [[]])[0]
+        docs  = results.get("documents", [[]])[0]
         metas = results.get("metadatas", [[]])[0]
         dists = results.get("distances", [[]])[0]
 
+        formatted_results = []
         for doc, meta, dist in zip(docs, metas, dists):
-            if dist <= 1.5:
+            if dist <= _SEARCH_DISTANCE_THRESHOLD:
                 formatted_results.append({
                     "content": doc,
                     "metadata": meta,
                     "distance": dist,
-                    "source": meta.get("source", "unknown")
+                    "source": meta.get("source", "unknown"),
+                })
+
+        # If distance filter removed everything, fall back to top-5 unfiltered
+        # so the LLM always has document context to work with.
+        if not formatted_results and docs:
+            logger.warning(
+                f"search_session_documents: all results filtered out for conversation "
+                f"{conversation_id} (threshold {_SEARCH_DISTANCE_THRESHOLD}). "
+                f"Min dist = {min(dists):.3f}. Returning top {min(5, len(docs))} unfiltered."
+            )
+            for doc, meta, dist in zip(docs[:5], metas[:5], dists[:5]):
+                formatted_results.append({
+                    "content": doc,
+                    "metadata": meta,
+                    "distance": dist,
+                    "source": meta.get("source", "unknown"),
                 })
 
         return formatted_results

@@ -18,48 +18,74 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────
-# 1. HuggingFace API Key & Embedding Config
+# 1. Embedding Config (pure transformers — no HuggingFace API)
 # ──────────────────────────────────────────────────────────
 HF_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 HF_EMBEDDING_DIM = 384
 
-_hf_api_key = getattr(settings, 'HF_API_KEY', None) or os.environ.get('HF_API_KEY', '')
 client = None  # kept for backward-compat references
 
-if _hf_api_key:
-    logger.info("HuggingFace API key loaded successfully")
-else:
-    logger.warning("HF_API_KEY not set — embeddings may be limited")
-
-
-# Singleton LangChain embeddings object
+# Singleton local transformers embedding object
 _lc_embeddings = None
 
 
 def get_lc_embeddings():
-    """Return singleton HuggingFaceEndpointEmbeddings (all-MiniLM-L6-v2, 384 dims).
+    """Return singleton LOCAL transformers embeddings — pure transformers, no API.
 
-    Uses the updated langchain_huggingface package which points to the new
-    router.huggingface.co endpoint (replaces deprecated api-inference.huggingface.co).
+    Uses AutoTokenizer + AutoModel from the `transformers` library directly.
+    No sentence-transformers, no HuggingFace API, no internet after first download.
+    Implements mean pooling + L2 normalisation (same as sentence-transformers).
+    Model: all-MiniLM-L6-v2 (384 dims, ~90MB, fast on CPU)
     """
     global _lc_embeddings
     if _lc_embeddings is None:
-        try:
-            # Preferred: new langchain_huggingface package
-            from langchain_huggingface import HuggingFaceEndpointEmbeddings
-            _lc_embeddings = HuggingFaceEndpointEmbeddings(
-                model=HF_EMBEDDING_MODEL,
-                huggingfacehub_api_token=_hf_api_key,
-            )
-            logger.info("Using HuggingFaceEndpointEmbeddings (router.huggingface.co)")
-        except ImportError:
-            # Fallback: old package — may fail with new HF API
-            from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-            _lc_embeddings = HuggingFaceInferenceAPIEmbeddings(
-                model_name=HF_EMBEDDING_MODEL,
-                api_key=_hf_api_key,
-            )
-            logger.warning("Falling back to deprecated HuggingFaceInferenceAPIEmbeddings")
+        import torch
+        import torch.nn.functional as F
+        from transformers import AutoTokenizer, AutoModel
+
+        class _TransformersEmbeddings:
+            """Pure-transformers embedding: mean pooling + L2 norm.
+            Identical output to sentence-transformers — no extra dependency.
+            """
+            def __init__(self, model_name: str):
+                self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self._model = AutoModel.from_pretrained(model_name)
+                self._model.eval()  # inference mode
+                logger.info(f"[Embeddings] Local transformers model loaded: {model_name}")
+
+            def _encode(self, texts: list) -> list:
+                """Tokenize → forward pass → mean pool → L2 normalize."""
+                encoded = self._tokenizer(
+                    texts,
+                    padding=True,
+                    truncation=True,
+                    max_length=512,
+                    return_tensors="pt",
+                )
+                with torch.no_grad():
+                    output = self._model(**encoded)
+
+                # Mean pooling over token dimension
+                token_emb = output.last_hidden_state          # [B, T, D]
+                mask = encoded["attention_mask"].unsqueeze(-1) # [B, T, 1]
+                summed = torch.sum(token_emb * mask, dim=1)   # [B, D]
+                count  = torch.clamp(mask.sum(dim=1), min=1e-9)
+                pooled = summed / count                        # [B, D]
+
+                # L2 normalise
+                normed = F.normalize(pooled, p=2, dim=1)      # [B, D]
+                return [list(map(float, v)) for v in normed.tolist()]
+
+            def embed_documents(self, texts):
+                """Embed list of documents — returns List[List[float]]."""
+                return self._encode([str(t) for t in texts])
+
+            def embed_query(self, text):
+                """Embed single query — returns List[float]."""
+                return self._encode([str(text)])[0]
+
+        _lc_embeddings = _TransformersEmbeddings(HF_EMBEDDING_MODEL)
+        logger.info("[Embeddings] Using pure transformers (no HuggingFace API, no sentence-transformers)")
     return _lc_embeddings
 
 
@@ -108,13 +134,11 @@ def _load_chroma_ef_base():
 
 
 class HuggingFaceEmbeddingFunction(_load_chroma_ef_base()):
-    """ChromaDB embedding function backed by HuggingFace Inference API.
+    """ChromaDB embedding function backed by LOCAL sentence-transformers.
 
-    Uses HuggingFaceEndpointEmbeddings from langchain_huggingface (new API,
-    router.huggingface.co) with a direct call — bypassing generate_hf_embeddings_batch
-    which is incompatible with the new API's expected text formats.
-
-    Model: sentence-transformers/all-MiniLM-L6-v2 (384 dims)
+    Runs all-MiniLM-L6-v2 fully locally on CPU.
+    No HuggingFace API key or internet connection required after first download.
+    Model: sentence-transformers/all-MiniLM-L6-v2 (384 dims, ~90MB)
     """
 
     def __init__(self):
@@ -125,7 +149,7 @@ class HuggingFaceEmbeddingFunction(_load_chroma_ef_base()):
         return HF_EMBEDDING_MODEL
 
     def _embed(self, texts: List[str]) -> List[List[float]]:
-        """Core embedding — uses get_lc_embeddings().embed_documents() directly."""
+        """Core embedding — uses LOCAL SentenceTransformer (no API call)."""
         try:
             lc_emb = get_lc_embeddings()
             raw = lc_emb.embed_documents([str(t) for t in texts])
@@ -136,7 +160,6 @@ class HuggingFaceEmbeddingFunction(_load_chroma_ef_base()):
                 else:
                     logger.warning(f"HuggingFaceEmbeddingFunction: invalid embedding at {i}, using zeros")
                     validated.append([0.0] * HF_EMBEDDING_DIM)
-            # Pad if needed
             if len(validated) < len(texts):
                 validated.extend([[0.0] * HF_EMBEDDING_DIM] * (len(texts) - len(validated)))
             return validated
@@ -155,10 +178,12 @@ class HuggingFaceEmbeddingFunction(_load_chroma_ef_base()):
         return self._embed(texts)
 
     def embed_query(self, input=None, **kwargs) -> List[float]:
-        """Embed a single query string."""
+        """Embed a single query string — returns guaranteed List[float]."""
         text = input or kwargs.get("text") or kwargs.get("query") or ""
-        results = self._embed([str(text)])
-        return results[0]
+        raw = self._embed([str(text)])
+        emb = raw[0]
+        # Always return a plain Python list of plain Python floats
+        return [float(x) for x in emb]
 
 
 _hf_embedding_function = None
@@ -767,14 +792,25 @@ _SEARCH_DISTANCE_THRESHOLD = 1.8
 def search_documents(query: str, collection, top_k: int = 5, metadata_filter: dict = None) -> dict:
     """Semantic search on the 'documents' (KB) collection.
 
-    Uses query_texts= so ChromaDB calls its registered HuggingFaceEmbeddingFunction,
-    keeping embedding generation in one place and avoiding any length-mismatch issues.
+    Computes the query embedding locally (via our SentenceTransformer) and passes
+    it as query_embeddings= to ChromaDB — bypassing ChromaDB's registered embedding
+    function entirely.  This avoids the 'float cannot be converted to Sequence' error
+    that occurs when the collection was indexed with a different embedding function.
     """
     try:
-        n_results = max(1, min(top_k, collection.count())) if collection.count() > 0 else top_k
+        if collection.count() == 0:
+            return {"documents": [], "metadatas": [], "distances": []}
+
+        n_results = max(1, min(top_k, collection.count()))
+
+        # Compute query embedding locally — guaranteed List[float]
+        ef = get_openai_embedding_function()
+        query_emb: List[float] = ef.embed_query(query)
+        # ChromaDB expects query_embeddings as List[List[float]] (one embedding per query)
+        query_embeddings = [[float(x) for x in query_emb]]
 
         query_params = {
-            "query_texts": [query],
+            "query_embeddings": query_embeddings,
             "n_results": n_results,
             "include": ["documents", "metadatas", "distances"],
         }
@@ -787,7 +823,7 @@ def search_documents(query: str, collection, top_k: int = 5, metadata_filter: di
             "documents": results.get("documents", [[]])[0],
             "metadatas": results.get("metadatas", [[]])[0],
             "distances": results.get("distances", [[]])[0],
-            "ids": results.get("ids", [[]])[0],
+            "ids":       results.get("ids", [[]])[0],
         }
 
         # Filter by distance threshold
@@ -827,8 +863,8 @@ def search_documents(query: str, collection, top_k: int = 5, metadata_filter: di
 def search_session_documents(query: str, conversation_id: int, top_k: int = 15, specific_filename: str = None) -> list:
     """Search within a session-specific ChromaDB collection.
 
-    Uses query_texts= so ChromaDB calls its registered HuggingFaceEmbeddingFunction,
-    keeping embedding generation in one place and avoiding any length-mismatch issues.
+    Computes the query embedding locally and passes as query_embeddings= —
+    bypasses ChromaDB's registered function to avoid type-conversion errors.
     """
     try:
         collection = get_or_create_session_collection(conversation_id)
@@ -838,8 +874,14 @@ def search_session_documents(query: str, conversation_id: int, top_k: int = 15, 
             return []
 
         n_results = min(top_k, collection.count())
+
+        # Compute query embedding locally — guaranteed List[float]
+        ef = get_openai_embedding_function()
+        query_emb: List[float] = ef.embed_query(query)
+        query_embeddings = [[float(x) for x in query_emb]]
+
         query_params = {
-            "query_texts": [query],
+            "query_embeddings": query_embeddings,
             "n_results": n_results,
             "include": ["documents", "metadatas", "distances"],
         }
@@ -856,26 +898,25 @@ def search_session_documents(query: str, conversation_id: int, top_k: int = 15, 
         for doc, meta, dist in zip(docs, metas, dists):
             if dist <= _SEARCH_DISTANCE_THRESHOLD:
                 formatted_results.append({
-                    "content": doc,
+                    "content":  doc,
                     "metadata": meta,
                     "distance": dist,
-                    "source": meta.get("source", "unknown"),
+                    "source":   meta.get("source", "unknown"),
                 })
 
         # If distance filter removed everything, fall back to top-5 unfiltered
-        # so the LLM always has document context to work with.
         if not formatted_results and docs:
             logger.warning(
-                f"search_session_documents: all results filtered out for conversation "
+                f"search_session_documents: all results filtered for conv "
                 f"{conversation_id} (threshold {_SEARCH_DISTANCE_THRESHOLD}). "
                 f"Min dist = {min(dists):.3f}. Returning top {min(5, len(docs))} unfiltered."
             )
             for doc, meta, dist in zip(docs[:5], metas[:5], dists[:5]):
                 formatted_results.append({
-                    "content": doc,
+                    "content":  doc,
                     "metadata": meta,
                     "distance": dist,
-                    "source": meta.get("source", "unknown"),
+                    "source":   meta.get("source", "unknown"),
                 })
 
         return formatted_results

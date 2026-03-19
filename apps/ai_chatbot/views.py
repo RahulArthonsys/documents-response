@@ -47,7 +47,7 @@ _detection_llm = None
 _embeddings = None
 
 # HuggingFace model configuration
-HF_MODEL = getattr(settings, 'HF_MODEL_ID', 'Qwen/Qwen3.5-9B')
+HF_MODEL = getattr(settings, 'HF_MODEL_ID', 'Qwen/Qwen3.5-0.8B')
 
 
 def _get_hf_api_key():
@@ -55,32 +55,55 @@ def _get_hf_api_key():
     return getattr(settings, 'HF_API_KEY', '') or os.environ.get('HF_API_KEY', '')
 
 
-def _build_hf_chat_llm(temperature: float = 0.3, max_new_tokens: int = 8192):
-    """Build and return a ChatHuggingFace instance backed by HuggingFace Inference API.
+def _build_local_chat_llm(temperature: float = 0.3, max_new_tokens: int = 512):
+    """Load HF_MODEL locally via transformers and return a LangChain-compatible chat model.
 
-    max_new_tokens raised to 8192 so Qwen3's think block does not consume
-    the entire budget before the actual answer is generated.
-    enable_thinking=False disables the <think> phase when TGI supports it.
+    Uses a minimal BaseChatModel subclass — no langchain-huggingface dependency required,
+    compatible with langchain-core 1.x.
+    device_map="auto" selects GPU if available, otherwise CPU.
     """
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-    endpoint = HuggingFaceEndpoint(
-        repo_id=HF_MODEL,
-        task="text-generation",
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        huggingfacehub_api_token=_get_hf_api_key(),
-        do_sample=(temperature > 0),
-    )
-    return ChatHuggingFace(llm=endpoint, verbose=False)
+    from typing import Any, List
+    from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline as hf_pipeline
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import BaseMessage, AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from pydantic import ConfigDict as _Config
+
+    class _LocalChatLLM(BaseChatModel):
+        model_config = _Config(arbitrary_types_allowed=True)
+        pipe: Any
+
+        def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs) -> ChatResult:
+            role_map = {"human": "user", "ai": "assistant", "system": "system"}
+            chat_msgs = [{"role": role_map.get(m.type, "user"), "content": m.content} for m in messages]
+            prompt = self.pipe.tokenizer.apply_chat_template(
+                chat_msgs, tokenize=False, add_generation_prompt=True,
+            )
+            output = self.pipe(prompt)
+            full_text = output[0]["generated_text"]
+            generated = full_text[len(prompt):].strip()
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=generated))])
+
+        @property
+        def _llm_type(self) -> str:
+            return "local_transformers"
+
+    tokenizer = AutoTokenizer.from_pretrained(HF_MODEL)
+    model = AutoModelForCausalLM.from_pretrained(HF_MODEL, torch_dtype="auto", device_map="auto")
+    pipe_kwargs = {"max_new_tokens": max_new_tokens, "do_sample": temperature > 0}
+    if temperature > 0:
+        pipe_kwargs["temperature"] = temperature
+    pipe = hf_pipeline("text-generation", model=model, tokenizer=tokenizer, **pipe_kwargs)
+    return _LocalChatLLM(pipe=pipe)
 
 
 def get_llm():
-    """Singleton ChatHuggingFace (Qwen/Qwen3.5-9B) — main response generation + agent."""
+    """Singleton ChatHuggingFace (Qwen/Qwen3.5-0.8B local) — main response generation + agent."""
     global _llm
     if _llm is None:
         try:
-            _llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
-            logger.info(f"HuggingFace LLM initialised: {HF_MODEL}")
+            _llm = _build_local_chat_llm(temperature=0.3, max_new_tokens=512)
+            logger.info(f"Local transformers LLM initialised: {HF_MODEL}")
         except Exception as e:
             logger.error(f"Failed to create LLM: {e}")
             raise
@@ -88,11 +111,11 @@ def get_llm():
 
 
 def get_detection_llm():
-    """Singleton ChatHuggingFace (Qwen/Qwen3.5-9B) — lightweight YES/NO detection gate."""
+    """Singleton ChatHuggingFace (Qwen/Qwen3.5-0.8B local) — lightweight YES/NO detection gate."""
     global _detection_llm
     if _detection_llm is None:
         try:
-            _detection_llm = _build_hf_chat_llm(temperature=0, max_new_tokens=20)
+            _detection_llm = _build_local_chat_llm(temperature=0, max_new_tokens=20)
         except Exception as e:
             logger.error(f"Failed to create detection LLM: {e}")
             raise
@@ -100,25 +123,14 @@ def get_detection_llm():
 
 
 def get_embeddings():
-    """Singleton HuggingFaceEndpointEmbeddings (all-MiniLM-L6-v2, 384 dims).
-
-    Uses langchain_huggingface which points to the new router.huggingface.co endpoint.
-    """
+    """Singleton HuggingFaceEmbeddings (all-MiniLM-L6-v2, 384 dims) — runs locally via sentence-transformers."""
     global _embeddings
     if _embeddings is None:
         try:
-            try:
-                from langchain_huggingface import HuggingFaceEndpointEmbeddings
-                _embeddings = HuggingFaceEndpointEmbeddings(
-                    model="sentence-transformers/all-MiniLM-L6-v2",
-                    huggingfacehub_api_token=_get_hf_api_key(),
-                )
-            except ImportError:
-                from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-                _embeddings = HuggingFaceInferenceAPIEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2",
-                    api_key=_get_hf_api_key(),
-                )
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            _embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+            )
         except Exception as e:
             logger.error(f"Failed to create embeddings: {e}")
             raise
@@ -422,7 +434,7 @@ def knowledge_base_search_tool(query: str, conversation: 'Conversation' = None) 
     # ── Step 6: LLM Generates Response ───────────────────────────────────────
     try:
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        rag_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
+        rag_llm = get_llm()
 
         messages_list = [SystemMessage(content=rag_prompt)]
         if conversation:
@@ -552,7 +564,7 @@ def session_document_search(query: str, conversation_id: int, specific_document:
                         "- Use Markdown formatting for clarity\n\n"
                         f"## Document Content\n\n{raw_context}\n\nNow respond:"
                     )
-                    sess_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
+                    sess_llm = get_llm()
                     resp = sess_llm.invoke([
                         SystemMessage(content=fallback_prompt),
                         HumanMessage(content=query),
@@ -605,7 +617,7 @@ def session_document_search(query: str, conversation_id: int, specific_document:
     # ── Step 6: LLM Generates Response ───────────────────────────────────────
     try:
         from langchain_core.messages import SystemMessage, HumanMessage
-        sess_llm = _build_hf_chat_llm(temperature=0.3, max_new_tokens=4096)
+        sess_llm = get_llm()
         resp = sess_llm.invoke([
             SystemMessage(content=rag_prompt),
             HumanMessage(content=query),
@@ -714,37 +726,49 @@ def get_conversational_agent(conversation_id: int = None, user=None):
     """Create a LangChain agent with registered tools and conversation memory.
 
     Uses tool-calling agent with ChatPromptTemplate backed by HuggingFace Qwen.
+    NOTE: create_openai_tools_agent requires bind_tools() which the local LLM
+    does not support. Direct routing via _route_and_respond() is used instead.
+    This function is kept for compatibility but delegates to direct routing.
     """
-    try:
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        from langchain_core.messages import SystemMessage
-        from langchain.agents import create_openai_tools_agent, AgentExecutor
+    return None  # Direct routing in stream_agent_response handles tool dispatch
 
-        llm = get_llm()
-        tools = get_conversational_tools(conversation_id=conversation_id, user=user)
 
-        prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+def _route_and_respond(query: str, conversation: 'Conversation') -> str:
+    """Direct tool routing: session docs → KB docs → general chat.
 
-        agent = create_openai_tools_agent(llm, tools, prompt)
+    Replaces LangChain agent tool-calling which requires bind_tools() support
+    that is unavailable on the local Qwen transformer model.
 
-        agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=False,
-            handle_parsing_errors=True,
-            max_iterations=5,
-            return_intermediate_steps=True,
-        )
+    Priority:
+      1. Session-uploaded documents (search_uploaded_documents)
+      2. Knowledge base documents  (search_knowledge_base)
+      3. General chat fallback
+    """
+    conv_id = conversation.pk
 
-        return agent_executor
-    except Exception as e:
-        logger.error(f"Agent creation failed: {e}\n{traceback.format_exc()}")
-        return None
+    # Priority 1: session documents uploaded by the user
+    has_session_docs = SessionDocument.objects.filter(
+        conversation_id=conv_id, is_processed=True
+    ).exists()
+    needs_retrieval = detect_is_question(query, has_session_document=has_session_docs)
+
+    if needs_retrieval:
+        if has_session_docs:
+            logger.info("[Router] Priority 1 → session document search")
+            return session_document_search(query, conv_id)
+
+        # Priority 2: knowledge base
+        try:
+            collection = vector_utils.get_or_create_collection()
+            if collection.count() > 0:
+                logger.info("[Router] Priority 2 → knowledge base search")
+                return knowledge_base_search_tool(query, conversation=conversation)
+        except Exception as e:
+            logger.warning(f"[Router] KB collection check failed: {e}")
+
+    # Priority 3: general chat (no documents / casual query)
+    logger.info("[Router] Priority 3 → general chat (no retrieval)")
+    return _general_chat_response(query, conversation)
 
 
 # ══════════════════════════════════════════════════════════
@@ -772,60 +796,22 @@ def stream_agent_response(query: str, conversation: 'Conversation') -> str:
           ▼
     Final Answer to User
     """
-    from langchain_core.messages import HumanMessage, AIMessage
-
-    # ── Step 1: Build Chat History ────────────────────────────────
-    recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
-    recent_msgs.reverse()
-    chat_history = []
-    for m in recent_msgs:
-        if m.role == 'user':
-            chat_history.append(HumanMessage(content=m.content))
-        elif m.role == 'assistant':
-            chat_history.append(AIMessage(content=m.content))
-
-    # ── Step 2: Get Agent with Registered Tools ───────────────────
-    # Agent has: search_uploaded_documents (P1) + search_knowledge_base (P2)
-    logger.info("[Pipeline] Step 2 | Creating LangChain agent with tool-call support")
-    agent = get_conversational_agent(
-        conversation_id=conversation.pk,
-        user=conversation.user,
-    )
-
-    if agent:
-        try:
-            # ── Step 3: Agent Invokes Tools & Generates Response ──────────
-            # Agent decides which tool(s) to call based on query & priorities
-            logger.info("[Pipeline] Step 3 | Agent invoking tools via tool-call")
-            result = agent.invoke({
-                "input": query,
-                "chat_history": chat_history,
-            })
-
-            # Log which tools were called
-            steps = result.get("intermediate_steps", [])
-            for step in steps:
-                if hasattr(step[0], 'tool'):
-                    logger.info(f"[Pipeline] Tool called: {step[0].tool!r} | Input: {str(step[0].tool_input)[:80]!r}")
-
-            raw = result.get("output", "")
-            clean = _strip_think_tags(raw)
-            logger.info(f"[Pipeline] Step 4 | Agent response ready ({len(clean)} chars)")
-            return clean or "I'm sorry, I couldn't process that request."
-
-        except Exception as e:
-            logger.error(f"[Pipeline] Agent invoke error: {e}\n{traceback.format_exc()}")
-
-    # ── Fallback: plain chat (no tools) ──────────────────────────
-    logger.info("[Pipeline] Fallback | Agent unavailable, using general chat")
-    return _general_chat_response(query, conversation)
+    # ── Step 1: Direct routing via priority-based tool dispatch ──
+    logger.info("[Pipeline] Step 1 | Routing query via direct dispatcher")
+    try:
+        answer = _route_and_respond(query, conversation)
+        logger.info(f"[Pipeline] Step 2 | Response ready ({len(answer)} chars)")
+        return answer or "I'm sorry, I couldn't process that request."
+    except Exception as e:
+        logger.error(f"[Pipeline] Routing error: {e}\n{traceback.format_exc()}")
+        return _general_chat_response(query, conversation)
 
 
 def _general_chat_response(query: str, conversation: 'Conversation') -> str:
     """Fallback: plain HuggingFace Qwen chat without document context."""
     try:
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-        chat_llm = _build_hf_chat_llm(temperature=0.4, max_new_tokens=4096)
+        chat_llm = get_llm()
 
         config = AgentPromptConfig.objects.first()
         system_prompt = SYSTEM_PROMPT
@@ -878,65 +864,21 @@ def generate_sse_stream(query: str, conversation: 'Conversation'):
     try:
         yield 'data: {"type": "start"}\n\n'
 
-        from langchain_core.messages import HumanMessage, AIMessage
+        # ── Step 1: Direct routing via priority-based tool dispatch ──
+        logger.info("[SSE Pipeline] Step 1 | Routing query via direct dispatcher")
+        clean_response = _route_and_respond(query, conversation)
+        logger.info(f"[SSE Pipeline] Step 2 | Response ready ({len(clean_response)} chars)")
 
-        # ── Step 1: Build Chat History ────────────────────────────
-        recent_msgs = list(conversation.messages.order_by('-timestamp')[:10])
-        recent_msgs.reverse()
-        chat_history = []
-        for m in recent_msgs:
-            if m.role == 'user':
-                chat_history.append(HumanMessage(content=m.content))
-            elif m.role == 'assistant':
-                chat_history.append(AIMessage(content=m.content))
-
-        # ── Step 2: Get Agent with Registered Tools ───────────────
-        # Agent has: search_uploaded_documents (P1) + search_knowledge_base (P2)
-        logger.info("[SSE Pipeline] Step 2 | Creating LangChain agent with tool-call support")
-        agent = get_conversational_agent(
-            conversation_id=conversation.pk,
-            user=conversation.user,
-        )
-
-        clean_response = ""
-
-        if agent:
-            # ── Step 3: Agent Invokes Tools & Generates Response ──────
-            # Agent autonomously decides which tool(s) to call
-            logger.info("[SSE Pipeline] Step 3 | Agent invoking tools via tool-call")
-            result = agent.invoke({
-                "input": query,
-                "chat_history": chat_history,
-            })
-
-            # Log which tools were called
-            steps = result.get("intermediate_steps", [])
-            for step in steps:
-                if hasattr(step[0], 'tool'):
-                    logger.info(
-                        f"[SSE Pipeline] Tool called: {step[0].tool!r} "
-                        f"| Input: {str(step[0].tool_input)[:80]!r}"
-                    )
-
-            raw = result.get("output", "")
-            clean_response = _strip_think_tags(raw)
-            logger.info(f"[SSE Pipeline] Step 4 | Agent response ready ({len(clean_response)} chars)")
-
-        # ── Step 4: Fallback if agent returned nothing ────────────
-        if not clean_response.strip():
-            logger.warning("[SSE Pipeline] Agent returned empty — falling back to general chat")
-            clean_response = _general_chat_response(query, conversation)
-
-        # ── Step 5: Word-by-Word SSE Stream → Client ─────────────
-        logger.info("[SSE Pipeline] Step 5 | Streaming response word-by-word")
+        # ── Step 3: Word-by-Word SSE Stream → Client ─────────────
+        logger.info("[SSE Pipeline] Step 3 | Streaming response word-by-word")
         words = clean_response.split(' ')
         for i, word in enumerate(words):
             token = word if i == len(words) - 1 else word + ' '
             escaped = json.dumps(token)
             yield f'data: {{"type": "token", "content": {escaped}}}\n\n'
 
-        # ── Step 6: Save & Confirm ────────────────────────────────
-        logger.info(f"[SSE Pipeline] Step 6 | Stream complete ({len(clean_response)} chars)")
+        # ── Step 4: Save & Confirm ────────────────────────────────
+        logger.info(f"[SSE Pipeline] Step 4 | Stream complete ({len(clean_response)} chars)")
         ConversationMessage.objects.create(
             conversation=conversation,
             role='assistant',

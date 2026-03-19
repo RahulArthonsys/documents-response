@@ -24,8 +24,12 @@ Werkzeug
 pretty-html-table
 tqdm
 openai
+python-dotenv
 
-# HuggingFace (all LLM + embeddings — Qwen/Qwen3.5-9B + all-MiniLM-L6-v2)
+# HuggingFace (local transformers — Qwen/Qwen3.5-0.8B + all-MiniLM-L6-v2)
+transformers
+accelerate
+torch
 langchain-huggingface
 huggingface_hub
 sentence-transformers

@@ -231,6 +231,17 @@ APPEND_SLASH = False
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # ##### HUGGING FACE CONFIGURATION ############################
-HF_API_KEY = os.environ.get('HF_API_KEY', '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')
-HF_MODEL_ID = os.environ.get('HF_MODEL_ID', 'Qwen/Qwen2.5-7B-Instruct')
+HF_API_KEY = os.environ.get('HF_API_KEY', '')
+
+# ── LLM Model ───────────────────────────────────────────────────────────────
+# 'Qwen/Qwen3-1.7B-Instruct' does NOT exist on HuggingFace.
+# 'Qwen/Qwen3-1.7B' IS the instruct model — Qwen3 series has no separate
+# -Instruct variant; all Qwen3 models support chat + thinking mode.
+#
+# RAM status: 3.3GB free — enough for Qwen3-1.7B (~3.4GB in float16).
+# Options:
+#   Qwen/Qwen2.5-0.5B-Instruct  ~0.5GB  (fallback if RAM tight)
+#   Qwen/Qwen2.5-1.5B-Instruct  ~1.5GB  (safe choice)
+#   Qwen/Qwen3-1.7B             ~3.4GB  ACTIVE ← same as Qwen3-1.7B-Instruct
+HF_MODEL_ID = 'Qwen/Qwen3-1.7B'  # hardcoded, env var bypassed
 
